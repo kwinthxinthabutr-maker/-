@@ -1,0 +1,178 @@
+local ScreenGui = Instance.new("ScreenGui")
+local MainFrame = Instance.new("Frame")
+local UICorner = Instance.new("UICorner")
+local TitleLabel = Instance.new("TextLabel")
+local FlyButton = Instance.new("TextButton")
+local NoOffButton = Instance.new("TextButton")
+local MinimizeButton = Instance.new("TextButton")
+local AlienImage = Instance.new("ImageLabel")
+
+ScreenGui.Name = "WormGUIFly"
+ScreenGui.Parent = game.CoreGui
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+MainFrame.Name = "MainFrame"
+MainFrame.Parent = ScreenGui
+MainFrame.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+MainFrame.BackgroundTransparency = 0.2
+MainFrame.BorderColor3 = Color3.fromRGB(0, 0, 0)
+MainFrame.BorderSizePixel = 0
+MainFrame.Position = UDim2.new(0.3, 0, 0.3, 0)
+MainFrame.Size = UDim2.new(0, 400, 0, 300)
+MainFrame.Active = true
+MainFrame.Draggable = true
+
+UICorner.Parent = MainFrame
+UICorner.CornerRadius = UDim.new(0, 10)
+
+TitleLabel.Name = "TitleLabel"
+TitleLabel.Parent = MainFrame
+TitleLabel.BackgroundColor3 = Color3.fromRGB(0, 180, 0)
+TitleLabel.BackgroundTransparency = 0.3
+TitleLabel.BorderSizePixel = 0
+TitleLabel.Position = UDim2.new(0, 0, 0, 0)
+TitleLabel.Size = UDim2.new(1, 0, 0, 40)
+TitleLabel.Font = Enum.Font.GothamBold
+TitleLabel.Text = "WORM FLY HUB v2.0"
+TitleLabel.TextColor3 = Color3.fromRGB(0, 0, 0)
+TitleLabel.TextSize = 20
+
+FlyButton.Name = "FlyButton"
+FlyButton.Parent = MainFrame
+FlyButton.BackgroundColor3 = Color3.fromRGB(0, 220, 0)
+FlyButton.BorderSizePixel = 0
+FlyButton.Position = UDim2.new(0.1, 0, 0.25, 0)
+FlyButton.Size = UDim2.new(0.8, 0, 0, 50)
+FlyButton.Font = Enum.Font.GothamBold
+FlyButton.Text = "FLY ON"
+FlyButton.TextColor3 = Color3.fromRGB(0, 0, 0)
+FlyButton.TextSize = 18
+FlyButton.MouseButton1Click:Connect(function()
+    local plr = game.Players.LocalPlayer
+    local char = plr.Character
+    if char then
+        local humanoid = char:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            if FlyButton.Text == "FLY ON" then
+                FlyButton.Text = "FLY OFF"
+                local bodyVelocity = Instance.new("BodyVelocity")
+                bodyVelocity.Velocity = Vector3.new(0, 50, 0)
+                bodyVelocity.MaxForce = Vector3.new(0, 4000, 0)
+                bodyVelocity.Parent = char.HumanoidRootPart
+                humanoid.PlatformStand = true
+            else
+                FlyButton.Text = "FLY ON"
+                local bv = char.HumanoidRootPart:FindFirstChildOfClass("BodyVelocity")
+                if bv then bv:Destroy() end
+                humanoid.PlatformStand = false
+            end
+        end
+    end
+end)
+
+NoOffButton.Name = "NoOffButton"
+NoOffButton.Parent = MainFrame
+NoOffButton.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
+NoOffButton.BorderSizePixel = 0
+NoOffButton.Position = UDim2.new(0.1, 0, 0.5, 0)
+NoOffButton.Size = UDim2.new(0.8, 0, 0, 50)
+NoOffButton.Font = Enum.Font.GothamBold
+NoOffButton.Text = "NO OFF"
+NoOffButton.TextColor3 = Color3.fromRGB(0, 0, 0)
+NoOffButton.TextSize = 18
+NoOffButton.MouseButton1Click:Connect(function()
+    NoOffButton.Text = "CANNOT CLOSE"
+    local closeConnection
+    closeConnection = game:GetService("CoreGui").ChildRemoved:Connect(function(child)
+        if child == ScreenGui then
+            wait(0.1)
+            ScreenGui.Parent = game.CoreGui
+            MainFrame.Visible = true
+            AlienImage.Visible = false
+        end
+    end)
+    local destroyConnection
+    destroyConnection = ScreenGui.Destroying:Connect(function()
+        wait(0.1)
+        local newGui = ScreenGui:Clone()
+        newGui.Parent = game.CoreGui
+    end)
+end)
+
+MinimizeButton.Name = "MinimizeButton"
+MinimizeButton.Parent = MainFrame
+MinimizeButton.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+MinimizeButton.BorderSizePixel = 0
+MinimizeButton.Position = UDim2.new(0.35, 0, 0.75, 0)
+MinimizeButton.Size = UDim2.new(0.3, 0, 0, 40)
+MinimizeButton.Font = Enum.Font.GothamBold
+MinimizeButton.Text = "MINIMIZE"
+MinimizeButton.TextColor3 = Color3.fromRGB(0, 0, 0)
+MinimizeButton.TextSize = 16
+MinimizeButton.MouseButton1Click:Connect(function()
+    MainFrame.Visible = false
+    AlienImage.Visible = true
+end)
+
+AlienImage.Name = "AlienImage"
+AlienImage.Parent = ScreenGui
+AlienImage.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+AlienImage.BackgroundTransparency = 0.5
+AlienImage.BorderSizePixel = 0
+AlienImage.Position = UDim2.new(0.45, 0, 0.4, 0)
+AlienImage.Size = UDim2.new(0, 80, 0, 80)
+AlienImage.Image = "rbxassetid://4483345998"
+AlienImage.ImageColor3 = Color3.fromRGB(0, 255, 0)
+AlienImage.Visible = false
+AlienImage.MouseButton1Click:Connect(function()
+    AlienImage.Visible = false
+    MainFrame.Visible = true
+end)
+
+local function makeAlienDraggable()
+    local dragging
+    local dragInput
+    local dragStart
+    local startPos
+    AlienImage.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPos = AlienImage.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+    AlienImage.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement then
+            dragInput = input
+        end
+    end)
+    game:GetService("UserInputService").InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            AlienImage.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+end
+
+makeAlienDraggable()
+
+local function makeNoOffPersistent()
+    while true do
+        wait(5)
+        if NoOffButton.Text == "CANNOT CLOSE" then
+            if not ScreenGui or not ScreenGui.Parent then
+                local newGui = ScreenGui:Clone()
+                newGui.Parent = game.CoreGui
+                newGui.MainFrame.Visible = true
+                newGui.AlienImage.Visible = false
+            end
+        end
+    end
+end
+
+coroutine.wrap(makeNoOffPersistent)()
