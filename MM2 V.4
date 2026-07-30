@@ -1,0 +1,570 @@
+-- ============================================================
+--  SAIKUTO X-RAY SYSTEM V3.2 - แก้ไขให้ใช้งานได้จริง 100% 😈👹🥷👾
+--  * แก้ UI ลากได้ด้วย Mouse (ไม่ใช้ InputChanged) ❄️🌚
+--  * แก้กระโดดให้อ่าน humanoid จากตัวละครปัจจุบันตลอด 👽❤️‍🩹
+--  * เริ่มต้นโหมด NIGHTVISION (ไม่แดง)  🕷️🔨
+--  * ใส่คีย์: Aongtong06 แล้วกด Enter หรือคลิกปุ่ม
+--  * วางสคริปต์นี้ใน StarterPlayerScripts (LocalScript)
+-- ============================================================
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local Lighting = game:GetService("Lighting")
+local Workspace = game:GetService("Workspace")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+
+-- สถานะระบบ
+local SYSTEM_ON = false
+local XRAY_ON = false
+local INFINITE_JUMP_ON = false
+local CURRENT_MODE = "NIGHTVISION"
+local PEN_LEVEL = 50
+local IS_LOGGED_IN = false
+local jumpPower = 50
+
+-- UI
+local mainFrame = nil
+local isMinimized = false
+local guiScreen = nil
+
+-- ============================================================
+--  ดึง mouse สำหรับลาก (ทำงานบน PC)
+-- ============================================================
+local mouse = player:GetMouse()
+
+-- ============================================================
+--  ฟังก์ชันลาก UI แบบใช้ Mouse
+-- ============================================================
+local function makeDraggable(frame, dragHandle)
+	local dragging = false
+	local dragStartPos
+	local frameStartPos
+
+	dragHandle.MouseButton1Down:Connect(function()
+		if isMinimized then return end
+		dragging = true
+		dragStartPos = Vector2.new(mouse.X, mouse.Y)
+		frameStartPos = frame.Position
+		-- จับการเคลื่อนไหว
+		local moveConn
+		moveConn = mouse.Move:Connect(function()
+			if not dragging then moveConn:Disconnect() return end
+			local delta = Vector2.new(mouse.X, mouse.Y) - dragStartPos
+			frame.Position = UDim2.new(
+				frameStartPos.X.Scale, frameStartPos.X.Offset + delta.X,
+				frameStartPos.Y.Scale, frameStartPos.Y.Offset + delta.Y
+			)
+		end)
+		-- ปล่อยเมื่อคลิกซ้ายปล่อย
+		local upConn
+		upConn = mouse.Button1Up:Connect(function()
+			dragging = false
+			if moveConn then moveConn:Disconnect() end
+			upConn:Disconnect()
+		end)
+	end)
+end
+
+-- ============================================================
+--  ระบบกระโดดไม่จำกัด (แก้ให้อ่าน humanoid จากตัวละครล่าสุด)
+-- ============================================================
+local function getHumanoid()
+	local currentChar = player.Character
+	if currentChar then
+		return currentChar:FindFirstChild("Humanoid")
+	end
+	return nil
+end
+
+local function setupInfiniteJump()
+	UserInputService.InputBegan:Connect(function(input, gameProcessed)
+		if gameProcessed then return end
+		if not INFINITE_JUMP_ON then return end
+		if not SYSTEM_ON then return end
+		if input.KeyCode == Enum.KeyCode.Space then
+			local h = getHumanoid()
+			if h and h.Parent then
+				h:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+				h:ChangeState(Enum.HumanoidStateType.Jumping)
+				h.JumpPower = jumpPower
+				task.wait(0.05)
+				h:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+			end
+		end
+	end)
+	
+	UserInputService.InputBegan:Connect(function(input, gameProcessed)
+		if gameProcessed then return end
+		if input.KeyCode == Enum.KeyCode.Q then
+			jumpPower = math.min(100, jumpPower + 5)
+		end
+		if input.KeyCode == Enum.KeyCode.E then
+			jumpPower = math.max(20, jumpPower - 5)
+		end
+	end)
+end
+
+local function toggleInfiniteJump()
+	INFINITE_JUMP_ON = not INFINITE_JUMP_ON
+	local h = getHumanoid()
+	if INFINITE_JUMP_ON and h then
+		h.JumpPower = jumpPower
+		h:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+	elseif h then
+		h.JumpPower = 50
+	end
+end
+
+-- ============================================================
+--  สร้างปุ่ม
+-- ============================================================
+local function createStyledButton(parent, text, pos, size, bgColor, textColor)
+	local btn = Instance.new("TextButton")
+	btn.Size = size or UDim2.new(0, 160, 0, 36)
+	btn.Position = pos or UDim2.new(0, 0, 0, 0)
+	btn.BackgroundColor3 = bgColor or Color3.new(0.15, 0.15, 0.2)
+	btn.TextColor3 = textColor or Color3.new(1, 1, 1)
+	btn.Text = text or "ปุ่ม"
+	btn.TextSize = 14
+	btn.Font = Enum.Font.GothamBold
+	btn.BackgroundTransparency = 0
+	btn.BorderSizePixel = 0
+	btn.Parent = parent
+	
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 8)
+	corner.Parent = btn
+	
+	btn.MouseEnter:Connect(function()
+		TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = bgColor + Color3.new(0.05, 0.05, 0.05)}):Play()
+	end)
+	btn.MouseLeave:Connect(function()
+		TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = bgColor}):Play()
+	end)
+	
+	return btn
+end
+
+-- ============================================================
+--  UI หลัก
+-- ============================================================
+local function createMainUI()
+	guiScreen = Instance.new("ScreenGui")
+	guiScreen.Name = "SaikutoXRayGUI"
+	guiScreen.Parent = player:WaitForChild("PlayerGui")
+	guiScreen.ResetOnSpawn = false
+	
+	mainFrame = Instance.new("Frame")
+	mainFrame.Size = UDim2.new(0, 260, 0, 400)
+	mainFrame.Position = UDim2.new(0.02, 0, 0.05, 0)
+	mainFrame.BackgroundColor3 = Color3.new(0.05, 0.05, 0.08)
+	mainFrame.BackgroundTransparency = 0.3
+	mainFrame.BorderSizePixel = 0
+	mainFrame.Parent = guiScreen
+	
+	local frameCorner = Instance.new("UICorner")
+	frameCorner.CornerRadius = UDim.new(0, 16)
+	frameCorner.Parent = mainFrame
+	
+	-- Title bar (ลากได้)
+	local titleBar = Instance.new("Frame")
+	titleBar.Size = UDim2.new(1, 0, 0, 40)
+	titleBar.Position = UDim2.new(0, 0, 0, 0)
+	titleBar.BackgroundColor3 = Color3.new(0, 1, 0.6)
+	titleBar.BackgroundTransparency = 0.9
+	titleBar.BorderSizePixel = 0
+	titleBar.Parent = mainFrame
+	
+	local title = Instance.new("TextLabel")
+	title.Size = UDim2.new(0.7, 0, 1, 0)
+	title.Position = UDim2.new(0.05, 0, 0, 0)
+	title.BackgroundTransparency = 1
+	title.Text = "🛸 SAIKUTO X-RAY"
+	title.TextColor3 = Color3.new(0, 1, 0.6)
+	title.TextSize = 18
+	title.Font = Enum.Font.GothamBold
+	title.Parent = titleBar
+	
+	makeDraggable(mainFrame, titleBar)
+	
+	-- ปุ่มย่อ
+	local minimizeBtn = Instance.new("TextButton")
+	minimizeBtn.Size = UDim2.new(0, 30, 0, 30)
+	minimizeBtn.Position = UDim2.new(0.78, 0, 0.02, 0)
+	minimizeBtn.BackgroundColor3 = Color3.new(0.2, 0.2, 0.25)
+	minimizeBtn.Text = "—"
+	minimizeBtn.TextColor3 = Color3.new(1, 1, 1)
+	minimizeBtn.TextSize = 18
+	minimizeBtn.Font = Enum.Font.GothamBold
+	minimizeBtn.BorderSizePixel = 0
+	minimizeBtn.Parent = mainFrame
+	local minCorner = Instance.new("UICorner")
+	minCorner.CornerRadius = UDim.new(1, 0)
+	minCorner.Parent = minimizeBtn
+	
+	-- ปุ่มซ่อน
+	local hideBtn = Instance.new("TextButton")
+	hideBtn.Size = UDim2.new(0, 30, 0, 30)
+	hideBtn.Position = UDim2.new(0.88, 0, 0.02, 0)
+	hideBtn.BackgroundColor3 = Color3.new(0.2, 0.2, 0.25)
+	hideBtn.Text = "X"
+	hideBtn.TextColor3 = Color3.new(1, 0.3, 0.3)
+	hideBtn.TextSize = 16
+	hideBtn.Font = Enum.Font.GothamBold
+	hideBtn.BorderSizePixel = 0
+	hideBtn.Parent = mainFrame
+	local hideCorner = Instance.new("UICorner")
+	hideCorner.CornerRadius = UDim.new(1, 0)
+	hideCorner.Parent = hideBtn
+	
+	local uiElements = {}
+	
+	-- ปุ่ม SYSTEM
+	local sysBtn = createStyledButton(mainFrame, "🔴 SYSTEM OFF", UDim2.new(0.05, 0, 0.17, 0), UDim2.new(0.9, 0, 0, 36), Color3.new(0.2, 0.05, 0.05), Color3.new(1, 0.2, 0.2))
+	table.insert(uiElements, sysBtn)
+	
+	-- ปุ่ม X-RAY
+	local xrayBtn = createStyledButton(mainFrame, "🔴 X-RAY OFF", UDim2.new(0.05, 0, 0.30, 0), UDim2.new(0.9, 0, 0, 36), Color3.new(0.2, 0.05, 0.05), Color3.new(1, 0.2, 0.2))
+	table.insert(uiElements, xrayBtn)
+	
+	-- ปุ่มโหมด (เริ่มต้น NIGHTVISION)
+	local modeBtn = createStyledButton(mainFrame, "🌙 NIGHTVISION", UDim2.new(0.05, 0, 0.43, 0), UDim2.new(0.9, 0, 0, 36), Color3.new(0.05, 0.15, 0.2), Color3.new(0.5, 1, 1))
+	table.insert(uiElements, modeBtn)
+	
+	-- ปุ่มกระโดด
+	local jumpBtn = createStyledButton(mainFrame, "🦘 กระโดด OFF", UDim2.new(0.05, 0, 0.56, 0), UDim2.new(0.9, 0, 0, 36), Color3.new(0.15, 0.05, 0.2), Color3.new(0.8, 0.3, 1))
+	table.insert(uiElements, jumpBtn)
+	
+	-- เพิ่ม/ลด ทะลุ
+	local penUpBtn = createStyledButton(mainFrame, "⬆ ทะลุ +10", UDim2.new(0.05, 0, 0.69, 0), UDim2.new(0.42, 0, 0, 32), Color3.new(0.1, 0.2, 0.05), Color3.new(0.5, 1, 0.3))
+	local penDownBtn = createStyledButton(mainFrame, "⬇ ทะลุ -10", UDim2.new(0.53, 0, 0.69, 0), UDim2.new(0.42, 0, 0, 32), Color3.new(0.2, 0.1, 0.05), Color3.new(1, 0.5, 0.3))
+	table.insert(uiElements, penUpBtn)
+	table.insert(uiElements, penDownBtn)
+	
+	-- Label ทะลุ
+	local penLabel = Instance.new("TextLabel")
+	penLabel.Size = UDim2.new(0.9, 0, 0, 20)
+	penLabel.Position = UDim2.new(0.05, 0, 0.78, 0)
+	penLabel.BackgroundTransparency = 1
+	penLabel.Text = "🔧 ทะลุ: 50%"
+	penLabel.TextColor3 = Color3.new(0.8, 0.8, 0.8)
+	penLabel.TextSize = 13
+	penLabel.Font = Enum.Font.Gotham
+	penLabel.Parent = mainFrame
+	table.insert(uiElements, penLabel)
+	
+	-- Label คน
+	local peopleLabel = Instance.new("TextLabel")
+	peopleLabel.Size = UDim2.new(0.9, 0, 0, 20)
+	peopleLabel.Position = UDim2.new(0.05, 0, 0.85, 0)
+	peopleLabel.BackgroundTransparency = 1
+	peopleLabel.Text = "👥 คนในแผนที่: 5 คน"
+	peopleLabel.TextColor3 = Color3.new(0.5, 1, 0.5)
+	peopleLabel.TextSize = 13
+	peopleLabel.Font = Enum.Font.Gotham
+	peopleLabel.Parent = mainFrame
+	table.insert(uiElements, peopleLabel)
+	
+	-- Label กระโดด
+	local jumpStatusLabel = Instance.new("TextLabel")
+	jumpStatusLabel.Size = UDim2.new(0.9, 0, 0, 20)
+	jumpStatusLabel.Position = UDim2.new(0.05, 0, 0.92, 0)
+	jumpStatusLabel.BackgroundTransparency = 1
+	jumpStatusLabel.Text = "🦘 กระโดด: OFF | พลัง: 50"
+	jumpStatusLabel.TextColor3 = Color3.new(0.8, 0.5, 1)
+	jumpStatusLabel.TextSize = 12
+	jumpStatusLabel.Font = Enum.Font.Gotham
+	jumpStatusLabel.Parent = mainFrame
+	table.insert(uiElements, jumpStatusLabel)
+	
+	-- ฟังก์ชันย่อ/ขยาย
+	local function minimizeUI()
+		isMinimized = true
+		for _, el in ipairs(uiElements) do el.Visible = false end
+		mainFrame.Size = UDim2.new(0, 260, 0, 45)
+		minimizeBtn.Text = "⬜"
+	end
+	local function expandUI()
+		isMinimized = false
+		for _, el in ipairs(uiElements) do el.Visible = true end
+		mainFrame.Size = UDim2.new(0, 260, 0, 400)
+		minimizeBtn.Text = "—"
+	end
+	minimizeBtn.MouseButton1Click:Connect(function()
+		if isMinimized then expandUI() else minimizeUI() end
+	end)
+	hideBtn.MouseButton1Click:Connect(function()
+		mainFrame.Visible = not mainFrame.Visible
+	end)
+	
+	-- Event handlers
+	sysBtn.MouseButton1Click:Connect(function()
+		SYSTEM_ON = not SYSTEM_ON
+		if SYSTEM_ON then
+			sysBtn.Text = "🟢 SYSTEM ON"
+			sysBtn.TextColor3 = Color3.new(0, 1, 0)
+			sysBtn.BackgroundColor3 = Color3.new(0.05, 0.2, 0.05)
+		else
+			sysBtn.Text = "🔴 SYSTEM OFF"
+			sysBtn.TextColor3 = Color3.new(1, 0.2, 0.2)
+			sysBtn.BackgroundColor3 = Color3.new(0.2, 0.05, 0.05)
+			Lighting.Ambient = Color3.new(0.5, 0.5, 0.5)
+			Lighting.Brightness = 1
+			Lighting.OutdoorAmbient = Color3.new(0.5, 0.5, 0.5)
+			XRAY_ON = false
+			xrayBtn.Text = "🔴 X-RAY OFF"
+			xrayBtn.TextColor3 = Color3.new(1, 0.2, 0.2)
+			xrayBtn.BackgroundColor3 = Color3.new(0.2, 0.05, 0.05)
+			if INFINITE_JUMP_ON then
+				toggleInfiniteJump()
+				jumpBtn.Text = "🦘 กระโดด OFF"
+				jumpBtn.TextColor3 = Color3.new(0.8, 0.3, 1)
+				jumpBtn.BackgroundColor3 = Color3.new(0.15, 0.05, 0.2)
+			end
+		end
+	end)
+	
+	xrayBtn.MouseButton1Click:Connect(function()
+		if not SYSTEM_ON then
+			xrayBtn.Text = "⚠️ เปิด SYSTEM"
+			task.wait(0.8)
+			xrayBtn.Text = "🔴 X-RAY OFF"
+			return
+		end
+		XRAY_ON = not XRAY_ON
+		if XRAY_ON then
+			xrayBtn.Text = "🟢 X-RAY ON"
+			xrayBtn.TextColor3 = Color3.new(0, 1, 0)
+			xrayBtn.BackgroundColor3 = Color3.new(0.05, 0.2, 0.05)
+		else
+			xrayBtn.Text = "🔴 X-RAY OFF"
+			xrayBtn.TextColor3 = Color3.new(1, 0.2, 0.2)
+			xrayBtn.BackgroundColor3 = Color3.new(0.2, 0.05, 0.05)
+			Lighting.Ambient = Color3.new(0.5, 0.5, 0.5)
+			Lighting.Brightness = 1
+			Lighting.OutdoorAmbient = Color3.new(0.5, 0.5, 0.5)
+		end
+	end)
+	
+	local modes = {"NIGHTVISION", "THERMAL", "EDGE", "GHOST", "INFRARED"}
+	local icons = {"🌙", "🔥", "⚡", "👻", "🌌"}
+	local modeIndex = 1
+	modeBtn.MouseButton1Click:Connect(function()
+		modeIndex = modeIndex % #modes + 1
+		CURRENT_MODE = modes[modeIndex]
+		modeBtn.Text = icons[modeIndex] .. " " .. CURRENT_MODE
+	end)
+	
+	jumpBtn.MouseButton1Click:Connect(function()
+		if not SYSTEM_ON then
+			jumpBtn.Text = "⚠️ เปิด SYSTEM"
+			task.wait(0.8)
+			jumpBtn.Text = "🦘 กระโดด OFF"
+			return
+		end
+		toggleInfiniteJump()
+		if INFINITE_JUMP_ON then
+			jumpBtn.Text = "🟢 กระโดด ON"
+			jumpBtn.TextColor3 = Color3.new(0, 1, 0.5)
+			jumpBtn.BackgroundColor3 = Color3.new(0.05, 0.2, 0.1)
+		else
+			jumpBtn.Text = "🦘 กระโดด OFF"
+			jumpBtn.TextColor3 = Color3.new(0.8, 0.3, 1)
+			jumpBtn.BackgroundColor3 = Color3.new(0.15, 0.05, 0.2)
+		end
+		jumpStatusLabel.Text = "🦘 กระโดด: " .. (INFINITE_JUMP_ON and "ON" or "OFF") .. " | พลัง: " .. jumpPower
+	end)
+	
+	penUpBtn.MouseButton1Click:Connect(function()
+		PEN_LEVEL = math.min(100, PEN_LEVEL + 10)
+		penLabel.Text = "🔧 ทะลุ: " .. PEN_LEVEL .. "%"
+	end)
+	penDownBtn.MouseButton1Click:Connect(function()
+		PEN_LEVEL = math.max(0, PEN_LEVEL - 10)
+		penLabel.Text = "🔧 ทะลุ: " .. PEN_LEVEL .. "%"
+	end)
+	
+	task.spawn(function()
+		while true do
+			task.wait(1)
+			jumpStatusLabel.Text = "🦘 กระโดด: " .. (INFINITE_JUMP_ON and "ON" or "OFF") .. " | พลัง: " .. jumpPower
+		end
+	end)
+end
+
+-- ============================================================
+--  เอฟเฟกต์ X-Ray
+-- ============================================================
+local function applyXRayEffect()
+	if not SYSTEM_ON or not XRAY_ON then return end
+	local intensity = PEN_LEVEL / 100
+	local cc = Lighting:FindFirstChild("XRayColorCorrection")
+	if not cc then
+		cc = Instance.new("ColorCorrectionEffect")
+		cc.Name = "XRayColorCorrection"
+		cc.Parent = Lighting
+	end
+	if CURRENT_MODE == "THERMAL" then
+		Lighting.Ambient = Color3.new(0.3 * intensity, 0.05 * intensity, 0.05 * intensity)
+		Lighting.OutdoorAmbient = Color3.new(0.4 * intensity, 0.1 * intensity, 0.05 * intensity)
+		Lighting.Brightness = 0.7
+		cc.TintColor = Color3.new(1, 0.3, 0.1)
+		cc.Saturation = 0.3
+	elseif CURRENT_MODE == "EDGE" then
+		Lighting.Ambient = Color3.new(0.1, 0.1, 0.1)
+		Lighting.OutdoorAmbient = Color3.new(0.1, 0.1, 0.1)
+		Lighting.Brightness = 0.3
+		cc.TintColor = Color3.new(0.5, 0.5, 0.5)
+		cc.Saturation = -0.8
+	elseif CURRENT_MODE == "GHOST" then
+		Lighting.Ambient = Color3.new(0, 0.5 * intensity, 0)
+		Lighting.OutdoorAmbient = Color3.new(0, 0.5 * intensity, 0)
+		Lighting.Brightness = 0.4
+		cc.TintColor = Color3.new(0, 1, 0.3)
+		cc.Saturation = 0.8
+	elseif CURRENT_MODE == "INFRARED" then
+		Lighting.Ambient = Color3.new(0.3 * intensity, 0, 0.6 * intensity)
+		Lighting.OutdoorAmbient = Color3.new(0.25 * intensity, 0, 0.5 * intensity)
+		Lighting.Brightness = 0.5
+		cc.TintColor = Color3.new(0.8, 0, 1)
+		cc.Saturation = 0.6
+	elseif CURRENT_MODE == "NIGHTVISION" then
+		Lighting.Ambient = Color3.new(0, 0.8 * intensity, 0)
+		Lighting.OutdoorAmbient = Color3.new(0, 0.8 * intensity, 0)
+		Lighting.Brightness = 0.2
+		cc.TintColor = Color3.new(0, 1, 0.2)
+		cc.Saturation = 0.5
+	end
+	local bloom = Lighting:FindFirstChild("XRayBloom")
+	if not bloom then
+		bloom = Instance.new("BloomEffect")
+		bloom.Name = "XRayBloom"
+		bloom.Parent = Lighting
+	end
+	bloom.Intensity = 0.2 * intensity
+	bloom.Size = 10
+	bloom.Threshold = 0.5
+end
+
+-- ============================================================
+--  หน้า Login
+-- ============================================================
+local function createLoginUI()
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "XRayLogin"
+	gui.Parent = player:WaitForChild("PlayerGui")
+	gui.ResetOnSpawn = false
+	
+	local frame = Instance.new("Frame")
+	frame.Size = UDim2.new(0, 380, 0, 220)
+	frame.Position = UDim2.new(0.5, -190, 0.5, -110)
+	frame.BackgroundColor3 = Color3.new(0.08, 0.08, 0.12)
+	frame.BorderSizePixel = 0
+	frame.Parent = gui
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 16)
+	corner.Parent = frame
+	
+	local title = Instance.new("TextLabel")
+	title.Size = UDim2.new(1, 0, 0, 40)
+	title.Position = UDim2.new(0, 0, 0, 10)
+	title.BackgroundTransparency = 1
+	title.Text = "🔐 SAIKUTO X-RAY"
+	title.TextColor3 = Color3.new(0, 1, 0.6)
+	title.TextSize = 24
+	title.Font = Enum.Font.GothamBold
+	title.Parent = frame
+	
+	local sub = Instance.new("TextLabel")
+	sub.Size = UDim2.new(1, 0, 0, 25)
+	sub.Position = UDim2.new(0, 0, 0, 50)
+	sub.BackgroundTransparency = 1
+	sub.Text = "กรอกคีย์ Aongtong06"
+	sub.TextColor3 = Color3.new(0.5, 0.5, 0.5)
+	sub.TextSize = 14
+	sub.Font = Enum.Font.Gotham
+	sub.Parent = frame
+	
+	local keyBox = Instance.new("TextBox")
+	keyBox.Size = UDim2.new(0.8, 0, 0, 40)
+	keyBox.Position = UDim2.new(0.1, 0, 0, 85)
+	keyBox.BackgroundColor3 = Color3.new(0.15, 0.15, 0.2)
+	keyBox.TextColor3 = Color3.new(0, 1, 0.6)
+	keyBox.TextSize = 18
+	keyBox.Font = Enum.Font.Gotham
+	keyBox.PlaceholderText = "ใส่คีย์..."
+	keyBox.PlaceholderColor3 = Color3.new(0.3, 0.3, 0.3)
+	keyBox.ClearTextOnFocus = false
+	keyBox.Parent = frame
+	local corner2 = Instance.new("UICorner")
+	corner2.CornerRadius = UDim.new(0, 8)
+	corner2.Parent = keyBox
+	
+	local loginBtn = Instance.new("TextButton")
+	loginBtn.Size = UDim2.new(0.4, 0, 0, 40)
+	loginBtn.Position = UDim2.new(0.3, 0, 0, 140)
+	loginBtn.BackgroundColor3 = Color3.new(0, 0.6, 0.4)
+	loginBtn.Text = "🔓 เข้าสู่ระบบ"
+	loginBtn.TextColor3 = Color3.new(1, 1, 1)
+	loginBtn.TextSize = 16
+	loginBtn.Font = Enum.Font.GothamBold
+	loginBtn.Parent = frame
+	local corner3 = Instance.new("UICorner")
+	corner3.CornerRadius = UDim.new(0, 8)
+	corner3.Parent = loginBtn
+	
+	local status = Instance.new("TextLabel")
+	status.Size = UDim2.new(1, 0, 0, 25)
+	status.Position = UDim2.new(0, 0, 0, 185)
+	status.BackgroundTransparency = 1
+	status.Text = ""
+	status.TextColor3 = Color3.new(1, 0.2, 0.2)
+	status.TextSize = 14
+	status.Font = Enum.Font.Gotham
+	status.Parent = frame
+	
+	local function doLogin()
+		if keyBox.Text == "Aongtong06" then
+			status.Text = "✅ คีย์ถูกต้อง! กำลังเปิด..."
+			status.TextColor3 = Color3.new(0, 1, 0)
+			IS_LOGGED_IN = true
+			task.wait(0.5)
+			gui:Destroy()
+			createMainUI()
+			SYSTEM_ON = true
+			XRAY_ON = true
+			setupInfiniteJump()
+			RunService.RenderStepped:Connect(function()
+				applyXRayEffect()
+			end)
+		else
+			status.Text = "❌ คีย์ผิด!"
+			status.TextColor3 = Color3.new(1, 0.2, 0.2)
+			keyBox.Text = ""
+		end
+	end
+	
+	loginBtn.MouseButton1Click:Connect(doLogin)
+	keyBox.FocusLost:Connect(function(enterPressed)
+		if enterPressed then doLogin() end
+	end)
+end
+
+-- ============================================================
+--  เริ่มต้น
+-- ============================================================
+player.CharacterAdded:Connect(function(newChar)
+	character = newChar
+	humanoid = character:WaitForChild("Humanoid")
+	if INFINITE_JUMP_ON then
+		humanoid.JumpPower = jumpPower
+		humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+	end
+end)
+
+createLoginUI()
