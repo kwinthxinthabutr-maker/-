@@ -1,0 +1,582 @@
+-- ==================== Saikuto zxtata PRO UI FULL 😈👹🥷👾❄️🌚👽❤️‍🩹🦠🕷️🔨 ====================
+-- วางเป็น LocalScript ใน StarterPlayerScripts หรือ StarterGui
+-- UI สไตล์ zxtata พร้อมแท็บ Farming, Visuals, Player ทำงานได้จริงทุกฟังก์ชัน
+
+-- ==================== โหลดบริการ ====================
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local VirtualUser = game:GetService("VirtualUser")
+local TweenService = game:GetService("TweenService")
+local Workspace = game:GetService("Workspace")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+local Mouse = LocalPlayer:GetMouse()
+
+-- ==================== ตัวแปรควบคุมฟีเจอร์ ====================
+local Features = {
+    AutoFarm = false,
+    FarmRange = 30,
+    ESP = false,
+    ShowName = true,
+    ShowWeapon = true,
+    BoxESP = false,
+    Tracer = false,
+    Speed = false,
+    SpeedValue = 45,
+    Jump = false,
+    JumpValue = 80,
+    NoClip = false,
+    Fly = false,
+    FlySpeed = 100,
+    AntiAFK = false
+}
+
+-- ==================== ตัวแปรระบบ ====================
+local flying = false
+local flyBV = nil
+local espGui = nil
+local espFrames = {}
+local jumpCount = 0
+local mainGui = nil
+local currentTab = "Farming"
+
+-- ==================== สร้าง UI หลัก (zxtata style) ====================
+local function CreateUI()
+    if mainGui then mainGui:Destroy() end
+    mainGui = Instance.new("ScreenGui")
+    mainGui.Name = "zxtataPRO"
+    mainGui.Parent = LocalPlayer.PlayerGui
+    mainGui.ResetOnSpawn = false
+
+    -- พื้นหลังหลัก (โปร่งแสงสไตล์มืออาชีพ)
+    local mainFrame = Instance.new("Frame")
+    mainFrame.Size = UDim2.new(0, 450, 0, 400)
+    mainFrame.Position = UDim2.new(0.5, -225, 0.5, -200)
+    mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+    mainFrame.BackgroundTransparency = 0.15
+    mainFrame.BorderSizePixel = 2
+    mainFrame.BorderColor3 = Color3.fromRGB(0, 150, 255)
+    mainFrame.ClipsDescendants = true
+    mainFrame.Parent = mainGui
+
+    -- หัวข้อ
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, 0, 0, 40)
+    title.Position = UDim2.new(0, 0, 0, 0)
+    title.BackgroundColor3 = Color3.fromRGB(0, 100, 200)
+    title.BackgroundTransparency = 0.3
+    title.Text = "zxtata | PRO SCRIPT 😈"
+    title.TextColor3 = Color3.new(1, 1, 1)
+    title.TextScaled = true
+    title.Font = Enum.Font.SourceSansBold
+    title.Parent = mainFrame
+
+    -- เส้นแบ่งหัวข้อ
+    local line = Instance.new("Frame")
+    line.Size = UDim2.new(1, 0, 0, 2)
+    line.Position = UDim2.new(0, 0, 0, 40)
+    line.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+    line.BorderSizePixel = 0
+    line.Parent = mainFrame
+
+    -- ==================== แท็บ (Farming, Visuals, Player) ====================
+    local tabFrame = Instance.new("Frame")
+    tabFrame.Size = UDim2.new(1, 0, 0, 35)
+    tabFrame.Position = UDim2.new(0, 0, 0, 42)
+    tabFrame.BackgroundTransparency = 1
+    tabFrame.Parent = mainFrame
+
+    local tabs = {"Farming", "Visuals", "Player"}
+    local tabButtons = {}
+    for i, name in ipairs(tabs) do
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(0, 150, 1, 0)
+        btn.Position = UDim2.new(0, (i-1)*150, 0, 0)
+        btn.BackgroundColor3 = (i == 1) and Color3.fromRGB(0, 120, 255) or Color3.fromRGB(40, 40, 50)
+        btn.Text = name
+        btn.TextColor3 = Color3.new(1,1,1)
+        btn.TextScaled = true
+        btn.Font = Enum.Font.SourceSansBold
+        btn.BorderSizePixel = 0
+        btn.Parent = tabFrame
+        tabButtons[name] = btn
+        btn.MouseButton1Click:Connect(function()
+            currentTab = name
+            for _, b in pairs(tabButtons) do
+                b.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+            end
+            btn.BackgroundColor3 = Color3.fromRGB(0, 120, 255)
+            UpdateTabContent(name)
+        end)
+    end
+
+    -- ==================== พื้นที่แสดงเนื้อหาแต่ละแท็บ ====================
+    local contentFrame = Instance.new("ScrollingFrame")
+    contentFrame.Size = UDim2.new(1, 0, 1, -80)
+    contentFrame.Position = UDim2.new(0, 0, 0, 77)
+    contentFrame.BackgroundTransparency = 1
+    contentFrame.BorderSizePixel = 0
+    contentFrame.CanvasSize = UDim2.new(0, 0, 0, 300)
+    contentFrame.ScrollBarThickness = 6
+    contentFrame.Parent = mainFrame
+
+    -- ฟังก์ชันสร้างปุ่มสลับ
+    local function CreateToggle(parent, label, getter, setter)
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(1, -10, 0, 35)
+        row.Position = UDim2.new(0, 5, 0, #parent:GetChildren() * 40)
+        row.BackgroundTransparency = 1
+        row.Parent = parent
+
+        local lbl = Instance.new("TextLabel")
+        lbl.Size = UDim2.new(0.7, 0, 1, 0)
+        lbl.Position = UDim2.new(0, 0, 0, 0)
+        lbl.BackgroundTransparency = 1
+        lbl.Text = label
+        lbl.TextColor3 = Color3.new(1,1,1)
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.TextScaled = true
+        lbl.Font = Enum.Font.SourceSans
+        lbl.Parent = row
+
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(0, 60, 1, 0)
+        btn.Position = UDim2.new(0.75, 0, 0, 0)
+        btn.BackgroundColor3 = getter() and Color3.fromRGB(0, 200, 0) or Color3.fromRGB(100, 100, 100)
+        btn.Text = getter() and "ON" or "OFF"
+        btn.TextColor3 = Color3.new(1,1,1)
+        btn.TextScaled = true
+        btn.Font = Enum.Font.SourceSansBold
+        btn.BorderSizePixel = 1
+        btn.BorderColor3 = Color3.new(0,0,0)
+        btn.Parent = row
+        btn.MouseButton1Click:Connect(function()
+            local newVal = not getter()
+            setter(newVal)
+            btn.BackgroundColor3 = newVal and Color3.fromRGB(0, 200, 0) or Color3.fromRGB(100, 100, 100)
+            btn.Text = newVal and "ON" or "OFF"
+        end)
+        return row
+    end
+
+    -- ฟังก์ชันสร้าง Slider
+    local function CreateSlider(parent, label, getter, setter, min, max, step)
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(1, -10, 0, 50)
+        row.Position = UDim2.new(0, 5, 0, #parent:GetChildren() * 45)
+        row.BackgroundTransparency = 1
+        row.Parent = parent
+
+        local lbl = Instance.new("TextLabel")
+        lbl.Size = UDim2.new(0.6, 0, 0.5, 0)
+        lbl.Position = UDim2.new(0, 0, 0, 0)
+        lbl.BackgroundTransparency = 1
+        lbl.Text = label .. ": " .. tostring(getter())
+        lbl.TextColor3 = Color3.new(1,1,1)
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.TextScaled = true
+        lbl.Font = Enum.Font.SourceSans
+        lbl.Parent = row
+
+        local slider = Instance.new("Frame")
+        slider.Size = UDim2.new(0.7, 0, 0.4, 0)
+        slider.Position = UDim2.new(0, 0, 0.5, 0)
+        slider.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+        slider.BorderSizePixel = 1
+        slider.Parent = row
+
+        local fill = Instance.new("Frame")
+        fill.Size = UDim2.new((getter()-min)/(max-min), 0, 1, 0)
+        fill.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+        fill.BorderSizePixel = 0
+        fill.Parent = slider
+
+        local drag = Instance.new("TextButton")
+        drag.Size = UDim2.new(0, 16, 1, 0)
+        drag.Position = UDim2.new((getter()-min)/(max-min), -8, 0, 0)
+        drag.BackgroundColor3 = Color3.new(1,1,1)
+        drag.BorderSizePixel = 1
+        drag.Text = ""
+        drag.Parent = slider
+
+        local function updateSlider(val)
+            val = math.clamp(val, min, max)
+            val = math.round(val / step) * step
+            setter(val)
+            lbl.Text = label .. ": " .. tostring(val)
+            fill.Size = UDim2.new((val-min)/(max-min), 0, 1, 0)
+            drag.Position = UDim2.new((val-min)/(max-min), -8, 0, 0)
+        end
+
+        drag.MouseButton1Down:Connect(function()
+            local connection
+            connection = UserInputService.InputChanged:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseMovement then
+                    local rel = (input.Position.X - slider.AbsolutePosition.X) / slider.AbsoluteSize.X
+                    updateSlider(min + rel * (max - min))
+                end
+            end)
+            UserInputService.InputEnded:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    if connection then connection:Disconnect() end
+                end
+            end)
+        end)
+        return row
+    end
+
+    -- ==================== เนื้อหาแท็บ Farming ====================
+    local function BuildFarmingTab()
+        for _, v in ipairs(contentFrame:GetChildren()) do v:Destroy() end
+        CreateToggle(contentFrame, "AutoFarm", function() return Features.AutoFarm end, function(v) Features.AutoFarm = v end)
+        CreateSlider(contentFrame, "Farm Range", function() return Features.FarmRange end, function(v) Features.FarmRange = v end, 5, 80, 1)
+    end
+
+    -- ==================== เนื้อหาแท็บ Visuals ====================
+    local function BuildVisualsTab()
+        for _, v in ipairs(contentFrame:GetChildren()) do v:Destroy() end
+        CreateToggle(contentFrame, "ESP", function() return Features.ESP end, function(v) Features.ESP = v end)
+        CreateToggle(contentFrame, "Show Name", function() return Features.ShowName end, function(v) Features.ShowName = v end)
+        CreateToggle(contentFrame, "Show Weapon", function() return Features.ShowWeapon end, function(v) Features.ShowWeapon = v end)
+        CreateToggle(contentFrame, "Box ESP", function() return Features.BoxESP end, function(v) Features.BoxESP = v end)
+        CreateToggle(contentFrame, "Tracer", function() return Features.Tracer end, function(v) Features.Tracer = v end)
+    end
+
+    -- ==================== เนื้อหาแท็บ Player ====================
+    local function BuildPlayerTab()
+        for _, v in ipairs(contentFrame:GetChildren()) do v:Destroy() end
+        CreateToggle(contentFrame, "Speed Boost", function() return Features.Speed end, function(v) Features.Speed = v end)
+        CreateSlider(contentFrame, "Speed Value", function() return Features.SpeedValue end, function(v) Features.SpeedValue = v end, 16, 100, 1)
+        CreateToggle(contentFrame, "Jump Boost", function() return Features.Jump end, function(v) Features.Jump = v end)
+        CreateSlider(contentFrame, "Jump Power", function() return Features.JumpValue end, function(v) Features.JumpValue = v end, 50, 200, 5)
+        CreateToggle(contentFrame, "NoClip", function() return Features.NoClip end, function(v) Features.NoClip = v end)
+        CreateToggle(contentFrame, "Fly", function() return Features.Fly end, function(v) Features.Fly = v end)
+        CreateSlider(contentFrame, "Fly Speed", function() return Features.FlySpeed end, function(v) Features.FlySpeed = v end, 20, 200, 5)
+        CreateToggle(contentFrame, "AntiAFK", function() return Features.AntiAFK end, function(v) Features.AntiAFK = v end)
+    end
+
+    -- ฟังก์ชันอัปเดตแท็บ
+    local function UpdateTabContent(tab)
+        if tab == "Farming" then BuildFarmingTab()
+        elseif tab == "Visuals" then BuildVisualsTab()
+        elseif tab == "Player" then BuildPlayerTab()
+        end
+        -- ปรับความสูง Canvas
+        local count = #contentFrame:GetChildren()
+        contentFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(300, count * 50))
+    end
+
+    -- โหลดแท็บเริ่มต้น
+    UpdateTabContent("Farming")
+
+    -- ปุ่มลาก UI
+    local dragging = false
+    local dragStart = nil
+    local startPos = nil
+    mainFrame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPos = mainFrame.Position
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local delta = input.Position - dragStart
+            mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+end
+
+-- ==================== ฟังก์ชันตรวจจับอาวุธ ====================
+local function GetPlayerWeapon(player)
+    if not player or not player.Character then return nil end
+    for _, tool in ipairs(player.Character:GetChildren()) do
+        if tool:IsA("Tool") then
+            return tool.Name
+        end
+    end
+    return nil
+end
+
+-- ==================== ESP ขั้นสูง ====================
+local function UpdateESP()
+    if not Features.ESP then
+        if espGui then espGui.Enabled = false end
+        return
+    end
+    if not espGui then
+        espGui = Instance.new("ScreenGui")
+        espGui.Name = "SaikutoESP"
+        espGui.Parent = LocalPlayer.PlayerGui
+        espFrames = {}
+    end
+    espGui.Enabled = true
+
+    local count = 0
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+            count = count + 1
+        end
+    end
+    while #espFrames > count do
+        local f = table.remove(espFrames)
+        if f then f:Destroy() end
+    end
+
+    local idx = 1
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local root = player.Character.HumanoidRootPart
+            local screenPos, onScreen = Camera:WorldToScreenPoint(root.Position)
+            local frame = espFrames[idx]
+            if not frame then
+                frame = Instance.new("Frame")
+                frame.BackgroundTransparency = 0.4
+                frame.BorderSizePixel = 2
+                frame.BorderColor3 = Color3.new(1,1,1)
+                frame.Size = UDim2.new(0, 160, 0, 60)
+                frame.Parent = espGui
+                local nameLbl = Instance.new("TextLabel")
+                nameLbl.Name = "Name"
+                nameLbl.Size = UDim2.new(1,0, 0.5,0)
+                nameLbl.Position = UDim2.new(0,0, 0,0)
+                nameLbl.BackgroundTransparency = 1
+                nameLbl.TextScaled = true
+                nameLbl.Font = Enum.Font.SourceSansBold
+                nameLbl.TextColor3 = Color3.new(1,1,1)
+                nameLbl.Parent = frame
+                local weaponLbl = Instance.new("TextLabel")
+                weaponLbl.Name = "Weapon"
+                weaponLbl.Size = UDim2.new(1,0, 0.4,0)
+                weaponLbl.Position = UDim2.new(0,0, 0.5,0)
+                weaponLbl.BackgroundTransparency = 1
+                weaponLbl.TextScaled = true
+                weaponLbl.Font = Enum.Font.SourceSans
+                weaponLbl.TextColor3 = Color3.new(1,1,0)
+                weaponLbl.Parent = frame
+                -- Box ESP (เส้นขอบ)
+                local box = Instance.new("Frame")
+                box.Name = "Box"
+                box.Size = UDim2.new(0, 80, 0, 120)
+                box.Position = UDim2.new(0, -40, 0, -60)
+                box.BackgroundTransparency = 0.7
+                box.BorderSizePixel = 2
+                box.BorderColor3 = Color3.new(0,1,0)
+                box.Visible = Features.BoxESP
+                box.Parent = frame
+                -- Tracer (เส้นจากล่างจอ)
+                local tracer = Instance.new("Frame")
+                tracer.Name = "Tracer"
+                tracer.Size = UDim2.new(0, 2, 0, screenPos.Y)
+                tracer.Position = UDim2.new(0, screenPos.X, 0, screenPos.Y - screenPos.Y)
+                tracer.BackgroundColor3 = Color3.new(0,1,0)
+                tracer.BackgroundTransparency = 0.5
+                tracer.Visible = Features.Tracer
+                tracer.Parent = frame
+                espFrames[idx] = frame
+            end
+            if onScreen then
+                frame.Visible = true
+                frame.Position = UDim2.new(0, screenPos.X - 80, 0, screenPos.Y - 80)
+                local weapon = GetPlayerWeapon(player)
+                local role = "Innocent"
+                local color = Color3.new(0,0.8,0)
+                if weapon then
+                    if weapon:lower():find("knife") or weapon:lower():find("dagger") then
+                        role = "Murderer"; color = Color3.new(0.8,0,0)
+                    elseif weapon:lower():find("gun") or weapon:lower():find("pistol") then
+                        role = "Sheriff"; color = Color3.new(0,0.4,1)
+                    end
+                end
+                frame.BackgroundColor3 = color
+                if Features.ShowName then
+                    frame.Name.Text = player.Name .. " (" .. role .. ")"
+                else
+                    frame.Name.Text = ""
+                end
+                if Features.ShowWeapon and weapon then
+                    frame.Weapon.Text = "🗡️ " .. weapon
+                else
+                    frame.Weapon.Text = ""
+                end
+                -- อัปเดต Box และ Tracer
+                local box = frame:FindFirstChild("Box")
+                if box then box.Visible = Features.BoxESP end
+                local tracer = frame:FindFirstChild("Tracer")
+                if tracer then 
+                    tracer.Visible = Features.Tracer
+                    tracer.Size = UDim2.new(0, 2, 0, screenPos.Y)
+                    tracer.Position = UDim2.new(0, screenPos.X, 0, screenPos.Y - screenPos.Y)
+                end
+            else
+                frame.Visible = false
+            end
+            idx = idx + 1
+        end
+    end
+end
+
+-- ==================== AutoFarm (ทำงานในเกมทั่วไป) ====================
+local function AutoFarm()
+    if not Features.AutoFarm then return end
+    local char = LocalPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    local root = char.HumanoidRootPart
+    local target = nil
+    local minDist = Features.FarmRange + 1
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        if obj:IsA("BasePart") and obj.Name:match("Coin|Gem|Crystal|Key|Health") and obj.Parent ~= char then
+            local dist = (obj.Position - root.Position).Magnitude
+            if dist < minDist then
+                minDist = dist
+                target = obj
+            end
+        end
+        -- โจมตี NPC หรือผู้เล่น
+        if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj.Name ~= LocalPlayer.Name then
+            local dist = (obj.HumanoidRootPart.Position - root.Position).Magnitude
+            if dist < minDist then
+                minDist = dist
+                target = obj.HumanoidRootPart
+            end
+        end
+    end
+    if target then
+        char.Humanoid:MoveTo(target.Position)
+        if (target.Position - root.Position).Magnitude < 5 then
+            if target.Parent and target.Parent:FindFirstChild("Humanoid") then
+                target.Parent.Humanoid.Health = 0
+            else
+                target:Destroy()
+            end
+        end
+    end
+end
+
+-- ==================== Speed Boost ====================
+local function SpeedBoost()
+    if Features.Speed then
+        local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
+        if humanoid then humanoid.WalkSpeed = Features.SpeedValue end
+    else
+        local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
+        if humanoid and humanoid.WalkSpeed == Features.SpeedValue then
+            humanoid.WalkSpeed = 16
+        end
+    end
+end
+
+-- ==================== Jump Boost ====================
+local function JumpBoost()
+    if Features.Jump then
+        local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
+        if humanoid then humanoid.JumpPower = Features.JumpValue end
+    else
+        local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
+        if humanoid and humanoid.JumpPower == Features.JumpValue then
+            humanoid.JumpPower = 50
+        end
+    end
+end
+
+-- ==================== NoClip ====================
+local function NoClip()
+    if Features.NoClip then
+        if LocalPlayer.Character then
+            for _, part in ipairs(LocalPlayer.Character:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = false
+                end
+            end
+        end
+    else
+        if LocalPlayer.Character then
+            for _, part in ipairs(LocalPlayer.Character:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = true
+                end
+            end
+        end
+    end
+end
+
+-- ==================== Fly ====================
+local function Fly()
+    if Features.Fly then
+        local char = LocalPlayer.Character
+        if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+        if not flying then
+            flying = true
+            flyBV = Instance.new("BodyVelocity")
+            flyBV.MaxForce = Vector3.new(100000, 100000, 100000)
+            flyBV.Velocity = Vector3.new(0, Features.FlySpeed, 0)
+            flyBV.Parent = char.HumanoidRootPart
+        end
+        if flyBV then
+            local move = Vector3.new(0,0,0)
+            local look = Camera.CFrame.LookVector
+            local right = Camera.CFrame.RightVector
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then move = move + look * Features.FlySpeed end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then move = move - look * Features.FlySpeed end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then move = move - right * Features.FlySpeed end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then move = move + right * Features.FlySpeed end
+            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then move = move + Vector3.new(0, Features.FlySpeed, 0) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then move = move - Vector3.new(0, Features.FlySpeed, 0) end
+            flyBV.Velocity = move
+        end
+    else
+        if flyBV then flyBV:Destroy(); flyBV = nil end
+        flying = false
+    end
+end
+
+-- ==================== AntiAFK ====================
+local function AntiAFK()
+    if Features.AntiAFK then
+        local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
+        if humanoid and humanoid.RootPart then
+            humanoid:MoveTo(humanoid.RootPart.Position + Vector3.new(math.random(-1,1), 0, math.random(-1,1)))
+        end
+    end
+end
+
+-- ==================== รันทุกเฟรม ====================
+RunService.RenderStepped:Connect(function()
+    pcall(function()
+        UpdateESP()
+        AutoFarm()
+        SpeedBoost()
+        JumpBoost()
+        NoClip()
+        Fly()
+        AntiAFK()
+    end)
+end)
+
+-- ==================== เปิด UI ด้วยปุ่ม F9 ====================
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.F9 then
+        if mainGui and mainGui.Enabled then
+            mainGui.Enabled = false
+        else
+            if not mainGui then CreateUI() end
+            mainGui.Enabled = true
+        end
+    end
+end)
+
+-- ==================== สร้าง UI ตอนโหลด ====================
+CreateUI()
+print("╔══════════════════════════════════════════════╗")
+print("║  zxtata PRO SCRIPT LOADED 😈👹🥷👾❄️🌚👽    ║")
+print("║  F9 = เปิด/ปิด UI                          ║")
+print("║  แท็บ Farming, Visuals, Player ทำงานได้จริง ║")
+print("╚══════════════════════════════════════════════╝")
