@@ -1,0 +1,286 @@
+-- ==================== Saikuto MM2 Ultra Fixed 😈👹🥷👾❄️🌚👽❤️‍🩹🦠🕷️🔨 ====================
+-- วางเป็น LocalScript ใน StarterPlayerScripts หรือ StarterGui
+-- กด F1-F7 เพื่อเปิด/ปิดฟีเจอร์
+-- รองรับ 3 บทบาท: Innocent (เขียว), Sheriff (น้ำเงิน), Murderer (แดง)
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local VirtualUser = game:GetService("VirtualUser")
+local Workspace = game:GetService("Workspace")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+local Mouse = LocalPlayer:GetMouse()
+
+-- ==================== ตัวแปรควบคุม ====================
+local ESPEnabled = true
+local AutoAimEnabled = false
+local AutoStabEnabled = false
+local SpeedBoostEnabled = false
+local NoClipEnabled = false
+local FlyEnabled = false
+local AntiAFKEnabled = false
+local SpeedValue = 40
+local FlySpeed = 80
+local flying = false
+local flyBodyVelocity = nil
+local jumpCount = 0
+
+-- ==================== ฟังก์ชันตรวจจับบทบาท (ปลอดภัย + ใช้ Tool) ====================
+local function GetPlayerRole(player)
+    if not player or not player.Character then return "Innocent" end
+    local char = player.Character
+    for _, tool in ipairs(char:GetChildren()) do
+        if tool:IsA("Tool") then
+            local name = tool.Name:lower()
+            if name:find("knife") or name:find("dagger") or name:find("blade") then
+                return "Murderer"
+            elseif name:find("gun") or name:find("pistol") or name:find("revolver") then
+                return "Sheriff"
+            end
+        end
+    end
+    return "Innocent"
+end
+
+-- ==================== ESP แยกสี (ใช้ Frame + Label) ====================
+local function CreateESP()
+    if not ESPEnabled then return end
+    -- ลบ ESP เก่า
+    for _, v in ipairs(LocalPlayer.PlayerGui:GetChildren()) do
+        if v.Name == "SaikutoESP" then v:Destroy() end
+    end
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "SaikutoESP"
+    gui.Parent = LocalPlayer.PlayerGui
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local root = player.Character.HumanoidRootPart
+            local screenPos, onScreen = Camera:WorldToScreenPoint(root.Position)
+            if onScreen then
+                local role = GetPlayerRole(player)
+                local color = Color3.new(0, 1, 0) -- Innocent
+                local roleText = "👤"
+                if role == "Sheriff" then
+                    color = Color3.new(0, 0.5, 1)
+                    roleText = "👮"
+                elseif role == "Murderer" then
+                    color = Color3.new(1, 0, 0)
+                    roleText = "🔪"
+                end
+                local frame = Instance.new("Frame")
+                frame.Size = UDim2.new(0, 120, 0, 40)
+                frame.Position = UDim2.new(0, screenPos.X - 60, 0, screenPos.Y - 60)
+                frame.BackgroundTransparency = 0.4
+                frame.BackgroundColor3 = color
+                frame.BorderSizePixel = 2
+                frame.BorderColor3 = Color3.new(1, 1, 1)
+                frame.Parent = gui
+
+                local label = Instance.new("TextLabel")
+                label.Size = UDim2.new(1, 0, 0.7, 0)
+                label.Position = UDim2.new(0, 0, 0, 0)
+                label.Text = player.Name .. " " .. roleText
+                label.TextColor3 = Color3.new(1, 1, 1)
+                label.BackgroundTransparency = 1
+                label.TextScaled = true
+                label.Font = Enum.Font.SourceSansBold
+                label.Parent = frame
+
+                local hpBar = Instance.new("Frame")
+                hpBar.Size = UDim2.new(1, 0, 0.3, 0)
+                hpBar.Position = UDim2.new(0, 0, 0.7, 0)
+                hpBar.BackgroundColor3 = Color3.new(0, 1, 0)
+                hpBar.BackgroundTransparency = 0.3
+                hpBar.BorderSizePixel = 0
+                hpBar.Parent = frame
+                if player.Character and player.Character:FindFirstChild("Humanoid") then
+                    local hp = player.Character.Humanoid.Health / player.Character.Humanoid.MaxHealth
+                    hpBar.Size = UDim2.new(hp, 0, 0.3, 0)
+                end
+            end
+        end
+    end
+    task.wait(0.1)
+    for _, v in ipairs(gui:GetChildren()) do
+        if v:IsA("Frame") then
+            v:Destroy()
+        end
+    end
+    gui:Destroy()
+end
+
+-- ==================== AutoAim สำหรับ Sheriff (เล็งไปที่ Murderer) ====================
+local function SheriffAutoAim()
+    if not AutoAimEnabled then return end
+    local role = GetPlayerRole(LocalPlayer)
+    if role ~= "Sheriff" then return end
+    local target = nil
+    local minDist = math.huge
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            if GetPlayerRole(player) == "Murderer" then
+                local dist = (player.Character.HumanoidRootPart.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
+                if dist < minDist then
+                    minDist = dist
+                    target = player.Character.HumanoidRootPart
+                end
+            end
+        end
+    end
+    if target then
+        Camera.CFrame = CFrame.new(Camera.CFrame.Position, target.Position)
+        -- ยิงอัตโนมัติ (จำลองคลิกซ้าย)
+        if Mouse then
+            Mouse.Button1Down:Fire() -- ใช้ VirtualUser แทน
+            VirtualUser:CaptureController()
+            VirtualUser:ClickButton2(Vector2.new(0, 0))
+        end
+    end
+end
+
+-- ==================== AutoStab สำหรับ Murderer ====================
+local function MurdererAutoStab()
+    if not AutoStabEnabled then return end
+    local role = GetPlayerRole(LocalPlayer)
+    if role ~= "Murderer" then return end
+    local target = nil
+    local minDist = math.huge
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local pRole = GetPlayerRole(player)
+            if pRole == "Innocent" or pRole == "Sheriff" then
+                local dist = (player.Character.HumanoidRootPart.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
+                if dist < minDist then
+                    minDist = dist
+                    target = player.Character.HumanoidRootPart
+                end
+            end
+        end
+    end
+    if target then
+        local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
+        if humanoid then
+            humanoid:MoveTo(target.Position)
+            if minDist < 5 then
+                -- แทงอัตโนมัติ
+                if Mouse then
+                    Mouse.Button1Down:Fire()
+                    VirtualUser:CaptureController()
+                    VirtualUser:ClickButton2(Vector2.new(0, 0))
+                end
+            end
+        end
+    end
+end
+
+-- ==================== SpeedBoost ====================
+local function SpeedBoost()
+    if not SpeedBoostEnabled then return end
+    local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
+    if humanoid then
+        humanoid.WalkSpeed = SpeedValue
+    end
+end
+
+-- ==================== NoClip ====================
+local function NoClip()
+    if not NoClipEnabled then return end
+    if LocalPlayer.Character then
+        for _, part in ipairs(LocalPlayer.Character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
+            end
+        end
+    end
+end
+
+-- ==================== Fly (ใช้ BodyVelocity) ====================
+local function Fly()
+    if not FlyEnabled then
+        if flyBodyVelocity then flyBodyVelocity:Destroy() end
+        flying = false
+        return
+    end
+    if not flying then
+        flying = true
+        local char = LocalPlayer.Character
+        if char and char:FindFirstChild("HumanoidRootPart") then
+            flyBodyVelocity = Instance.new("BodyVelocity")
+            flyBodyVelocity.MaxForce = Vector3.new(100000, 100000, 100000)
+            flyBodyVelocity.Velocity = Vector3.new(0, FlySpeed, 0)
+            flyBodyVelocity.Parent = char.HumanoidRootPart
+        end
+    else
+        if flyBodyVelocity then
+            local moveDir = Vector3.new(0, 0, 0)
+            local camLook = Camera.CFrame.LookVector
+            local camRight = Camera.CFrame.RightVector
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir = moveDir + camLook * FlySpeed end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir = moveDir - camLook * FlySpeed end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir - camRight * FlySpeed end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + camRight * FlySpeed end
+            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveDir = moveDir + Vector3.new(0, FlySpeed, 0) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then moveDir = moveDir - Vector3.new(0, FlySpeed, 0) end
+            flyBodyVelocity.Velocity = moveDir
+        end
+    end
+end
+
+-- ==================== AntiAFK (ขยับนิดหน่อย) ====================
+local function AntiAFK()
+    if not AntiAFKEnabled then return end
+    local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
+    if humanoid and humanoid.RootPart then
+        humanoid:MoveTo(humanoid.RootPart.Position + Vector3.new(math.random(-2,2), 0, math.random(-2,2)))
+    end
+end
+
+-- ==================== รันฟังก์ชันทุกเฟรม ====================
+RunService.RenderStepped:Connect(function()
+    pcall(function()
+        CreateESP()
+        SheriffAutoAim()
+        MurdererAutoStab()
+        SpeedBoost()
+        NoClip()
+        Fly()
+        if AntiAFKEnabled then AntiAFK() end
+    end)
+end)
+
+-- ==================== ปุ่มลัด (F1-F7) ====================
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    local key = input.KeyCode
+    if key == Enum.KeyCode.F1 then
+        ESPEnabled = not ESPEnabled
+        print("[Saikuto] ESP:", ESPEnabled and "ON 😈" or "OFF")
+    elseif key == Enum.KeyCode.F2 then
+        AutoAimEnabled = not AutoAimEnabled
+        print("[Saikuto] AutoAim (Sheriff):", AutoAimEnabled and "ON 🎯" or "OFF")
+    elseif key == Enum.KeyCode.F3 then
+        AutoStabEnabled = not AutoStabEnabled
+        print("[Saikuto] AutoStab (Murderer):", AutoStabEnabled and "ON 🔪" or "OFF")
+    elseif key == Enum.KeyCode.F4 then
+        SpeedBoostEnabled = not SpeedBoostEnabled
+        print("[Saikuto] SpeedBoost:", SpeedBoostEnabled and "ON 💨" or "OFF")
+    elseif key == Enum.KeyCode.F5 then
+        NoClipEnabled = not NoClipEnabled
+        print("[Saikuto] NoClip:", NoClipEnabled and "ON 🧱" or "OFF")
+    elseif key == Enum.KeyCode.F6 then
+        FlyEnabled = not FlyEnabled
+        print("[Saikuto] Fly:", FlyEnabled and "ON ✈️" or "OFF")
+    elseif key == Enum.KeyCode.F7 then
+        AntiAFKEnabled = not AntiAFKEnabled
+        print("[Saikuto] AntiAFK:", AntiAFKEnabled and "ON 💤" or "OFF")
+    end
+end)
+
+-- ==================== โหลดสำเร็จ ====================
+print("╔══════════════════════════════════════════╗")
+print("║  Saikuto MM2 Ultra Loaded 😈👹🥷👾❄️🌚👽  ║")
+print("║  F1=ESP  F2=AutoAim  F3=AutoStab       ║")
+print("║  F4=Speed  F5=NoClip  F6=Fly  F7=AntiAFK║")
+print("╚══════════════════════════════════════════╝")
