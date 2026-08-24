@@ -1,0 +1,1082 @@
+-- =====================================================================
+-- [DELTA SURGE HUB V.8 - ULTIMATE STAND & POTATO GRAPHICS EDITION]
+-- พัฒนาด้วยมาตรฐานวิศวกรรมซอฟต์แวร์ระดับปริญญาเอกสำหรับ Delta Executor[span_7](start_span)[span_7](end_span)
+-- ฟีเจอร์ใหม่: ระบบล่องหน, ภาพมันฝรั่งบด (Potato FPS Boost), หยุดเวลา The World (JoJo)
+-- รองรับระบบ Anti-Cheat Bypass, Metatable Hooking, และ Lag Reduction[span_8](start_span)[span_8](end_span)[span_9](start_span)[span_9](end_span)
+-- =====================================================================
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local CoreGui = game:GetService("CoreGui")
+local VirtualUser = game:GetService("VirtualUser")
+local Workspace = game:GetService("Workspace")
+local Lighting = game:GetService("Lighting")
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+local Camera = Workspace.CurrentCamera
+local Mouse = LocalPlayer:GetMouse()
+
+local TargetGui = CoreGui:FindFirstChild("RobloxGui") or LocalPlayer:WaitForChild("PlayerGui")[span_10](start_span)[span_10](end_span)[span_11](start_span)[span_11](end_span)
+
+-- ล้างหน่วยความจำ UI เดิมเพื่อป้องกันการซ้อนทับ[span_12](start_span)[span_12](end_span)[span_13](start_span)[span_13](end_span)
+if TargetGui:FindFirstChild("DeltaSurgeLoading") then TargetGui.DeltaSurgeLoading:Destroy() end
+if TargetGui:FindFirstChild("DeltaSurgeHub") then TargetGui.DeltaSurgeHub:Destroy() end
+if TargetGui:FindFirstChild("TimeStopFX") then TargetGui.TimeStopFX:Destroy() end
+
+-- =====================================================================
+-- 1. ระบบความปลอดภัยสูงสุด: Metatable Hooking (Anti-Cheat Bypass)[span_14](start_span)[span_14](end_span)[span_15](start_span)[span_15](end_span)
+-- =====================================================================
+local mt = getrawmetatable(game)[span_16](start_span)[span_16](end_span)[span_17](start_span)[span_17](end_span)
+setreadonly(mt, false)[span_18](start_span)[span_18](end_span)[span_19](start_span)[span_19](end_span)
+local oldNamecall = mt.__namecall[span_20](start_span)[span_20](end_span)[span_21](start_span)[span_21](end_span)
+
+mt.__namecall = newcclosure(function(self, ...)[span_22](start_span)[span_22](end_span)[span_23](start_span)[span_23](end_span)
+    local method = getnamecallmethod()[span_24](start_span)[span_24](end_span)[span_25](start_span)[span_25](end_span)
+    local args = {...}[span_26](start_span)[span_26](end_span)
+    
+    if method == "FireServer" and self.ClassName == "RemoteEvent" then[span_27](start_span)[span_27](end_span)[span_28](start_span)[span_28](end_span)
+        local remoteName = string.lower(self.Name)
+        if string.find(remoteName, "die") or string.find(remoteName, "kill") or string.find(remoteName, "damage") then
+            return nil
+        end
+    end
+    
+    return oldNamecall(self, ...)[span_29](start_span)[span_29](end_span)[span_30](start_span)[span_30](end_span)
+end)
+setreadonly(mt, true)[span_31](start_span)[span_31](end_span)[span_32](start_span)[span_32](end_span)
+
+-- =====================================================================
+-- 2. ระบบจัดการหน่วยความจำและลดอาการแลค (Lag Reduction Engine)[span_33](start_span)[span_33](end_span)[span_34](start_span)[span_34](end_span)
+-- =====================================================================
+task.spawn(function()[span_35](start_span)[span_35](end_span)[span_36](start_span)[span_36](end_span)
+    while true do[span_37](start_span)[span_37](end_span)[span_38](start_span)[span_38](end_span)
+        task.wait(30)[span_39](start_span)[span_39](end_span)[span_40](start_span)[span_40](end_span)
+        pcall(function()[span_41](start_span)[span_41](end_span)[span_42](start_span)[span_42](end_span)
+            for _, obj in ipairs(Workspace:GetChildren()) do[span_43](start_span)[span_43](end_span)[span_44](start_span)[span_44](end_span)
+                if obj:IsA("BasePart") and not obj.Anchored and obj.Position.Y < -50 then[span_45](start_span)[span_45](end_span)[span_46](start_span)[span_46](end_span)
+                    obj:Destroy()[span_47](start_span)[span_47](end_span)[span_48](start_span)[span_48](end_span)
+                end
+            end
+        end)
+    end
+end)
+
+-- =====================================================================
+-- 3. หน้าจอโหลดข้อมูลพรีเมียม (DELTA SURGE LOADING SCREEN)[span_49](start_span)[span_49](end_span)
+-- =====================================================================
+local LoadingGui = Instance.new("ScreenGui")[span_50](start_span)[span_50](end_span)
+LoadingGui.Name = "DeltaSurgeLoading"
+LoadingGui.IgnoreGuiInset = true[span_51](start_span)[span_51](end_span)
+LoadingGui.ResetOnSpawn = false[span_52](start_span)[span_52](end_span)
+LoadingGui.Parent = TargetGui[span_53](start_span)[span_53](end_span)
+
+local LoadBackground = Instance.new("Frame")[span_54](start_span)[span_54](end_span)
+LoadBackground.Size = UDim2.new(1, 0, 1, 0)[span_55](start_span)[span_55](end_span)
+LoadBackground.BackgroundColor3 = Color3.fromRGB(15, 15, 18)[span_56](start_span)[span_56](end_span)
+LoadBackground.BorderSizePixel = 0[span_57](start_span)[span_57](end_span)
+LoadBackground.Parent = LoadingGui[span_58](start_span)[span_58](end_span)
+
+local LoadTitle = Instance.new("TextLabel")[span_59](start_span)[span_59](end_span)
+LoadTitle.Size = UDim2.new(1, 0, 0, 50)[span_60](start_span)[span_60](end_span)
+LoadTitle.Position = UDim2.new(0, 0, 0.38, -40)
+LoadTitle.BackgroundTransparency = 1[span_61](start_span)[span_61](end_span)
+LoadTitle.Text = "⚡ DELTA SURGE V.8 (STAND EDITION) ⚡"
+LoadTitle.TextColor3 = Color3.fromRGB(0, 170, 255)
+LoadTitle.Font = Enum.Font.GothamBold[span_62](start_span)[span_62](end_span)
+LoadTitle.TextSize = 22
+LoadTitle.Parent = LoadBackground[span_63](start_span)[span_63](end_span)
+
+local StatusLabel = Instance.new("TextLabel")[span_64](start_span)[span_64](end_span)
+StatusLabel.Size = UDim2.new(1, 0, 0, 30)[span_65](start_span)[span_65](end_span)
+StatusLabel.Position = UDim2.new(0, 0, 0.38, 15)
+StatusLabel.BackgroundTransparency = 1[span_66](start_span)[span_66](end_span)
+StatusLabel.Text = "กำลังโหลดโมดูล The World, Potato Graphics & Invisibility..."
+StatusLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
+StatusLabel.Font = Enum.Font.Gotham[span_67](start_span)[span_67](end_span)
+StatusLabel.TextSize = 13
+StatusLabel.Parent = LoadBackground[span_68](start_span)[span_68](end_span)
+
+local BarBackground = Instance.new("Frame")[span_69](start_span)[span_69](end_span)
+BarBackground.Size = UDim2.new(0.6, 0, 0, 10)[span_70](start_span)[span_70](end_span)
+BarBackground.Position = UDim2.new(0.2, 0, 0.48, 20)
+BarBackground.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
+BarBackground.BorderSizePixel = 0[span_71](start_span)[span_71](end_span)
+BarBackground.Parent = LoadBackground[span_72](start_span)[span_72](end_span)
+
+local BarCorner = Instance.new("UICorner")[span_73](start_span)[span_73](end_span)
+BarCorner.CornerRadius = UDim.new(1, 0)[span_74](start_span)[span_74](end_span)
+BarCorner.Parent = BarBackground[span_75](start_span)[span_75](end_span)
+
+local BarFill = Instance.new("Frame")[span_76](start_span)[span_76](end_span)
+BarFill.Size = UDim2.new(0, 0, 1, 0)[span_77](start_span)[span_77](end_span)
+BarFill.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+BarFill.BorderSizePixel = 0[span_78](start_span)[span_78](end_span)
+BarFill.Parent = BarBackground[span_79](start_span)[span_79](end_span)
+
+local FillCorner = Instance.new("UICorner")[span_80](start_span)[span_80](end_span)
+FillCorner.CornerRadius = UDim.new(1, 0)[span_81](start_span)[span_81](end_span)
+FillCorner.Parent = BarFill[span_82](start_span)[span_82](end_span)
+
+local PercentLabel = Instance.new("TextLabel")[span_83](start_span)[span_83](end_span)
+PercentLabel.Size = UDim2.new(1, 0, 0, 25)[span_84](start_span)[span_84](end_span)
+PercentLabel.Position = UDim2.new(0, 0, 0.48, 38)
+PercentLabel.BackgroundTransparency = 1[span_85](start_span)[span_85](end_span)
+PercentLabel.Text = "0%"
+PercentLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+PercentLabel.Font = Enum.Font.GothamBold[span_86](start_span)[span_86](end_span)
+PercentLabel.TextSize = 14
+PercentLabel.Parent = LoadBackground[span_87](start_span)[span_87](end_span)
+
+local loadDuration = math.random(20, 28) / 10
+local tweenInfo = TweenInfo.new(loadDuration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)[span_88](start_span)[span_88](end_span)
+local tweenBar = TweenService:Create(BarFill, tweenInfo, {Size = UDim2.new(1, 0, 1, 0)})[span_89](start_span)[span_89](end_span)
+tweenBar:Play()
+
+local startTime = tick()
+while tick() - startTime < loadDuration do
+    local progress = math.clamp((tick() - startTime) / loadDuration, 0, 1)[span_90](start_span)[span_90](end_span)
+    PercentLabel.Text = string.format("%d%%", math.floor(progress * 100))[span_91](start_span)[span_91](end_span)
+    task.wait()
+end
+
+PercentLabel.Text = "100%[span_92](start_span)"[span_92](end_span)
+StatusLabel.Text = "ระบบ Delta Surge V.8 พร้อมทำงาน!"
+task.wait(0.3)
+
+local fadeTween = TweenService:Create(LoadBackground, TweenInfo.new(0.4), {BackgroundTransparency = 1})[span_93](start_span)[span_93](end_span)
+fadeTween:Play()
+fadeTween.Completed:Connect(function()
+    LoadingGui:Destroy()[span_94](start_span)[span_94](end_span)
+end)
+
+-- =====================================================================
+-- 4. ศูนย์กลางการจัดการตัวแปรและสถานะ (Global State Controller)[span_95](start_span)[span_95](end_span)
+-- =====================================================================
+local SurgeSettings = {
+    SpeedEnabled = false,
+    WalkSpeed = 50,
+    JumpPowerEnabled = false,
+    JumpPower = 100,
+    InfJumpEnabled = false,
+    NoclipEnabled = false,
+    FlyEnabled = false,
+    FlySpeed = 50,
+    TeleportEnabled = false,
+    AimbotEnabled = false,
+    ESPEnabled = false,
+    AntiAFKEnabled = false,
+    HitboxEnabled = false,
+    HitboxSize = 15,
+    -- ตัวแปรฟีเจอร์ใหม่
+    InvisibleEnabled = false,
+    PotatoGraphicsEnabled = false,
+    TimeStopEnabled = false
+}
+
+local SurgeConnections = {}
+local SurgeESPObjects = {}
+local FlyBodyVelocity = nil
+local FlyBodyGyro = nil
+local originalMaterials = {}
+local timeStoppedParts = {}
+local frozenTracks = {}
+
+local function GetHumanlikeOffset(targetPosition)[span_96](start_span)[span_96](end_span)[span_97](start_span)[span_97](end_span)
+    local offsetX = math.random(-3, 3)[span_98](start_span)[span_98](end_span)[span_99](start_span)[span_99](end_span)
+    local offsetZ = math.random(-3, 3)[span_100](start_span)[span_100](end_span)[span_101](start_span)[span_101](end_span)
+    return targetPosition + Vector3.new(offsetX, 0, offsetZ)[span_102](start_span)[span_102](end_span)[span_103](start_span)[span_103](end_span)
+end
+
+-- =====================================================================
+-- 5. โครงสร้าง MODERN DARK MODE UI HUB (TAB SYSTEM)[span_104](start_span)[span_104](end_span)[span_105](start_span)[span_105](end_span)
+-- =====================================================================
+local ScreenGui = Instance.new("ScreenGui")[span_106](start_span)[span_106](end_span)[span_107](start_span)[span_107](end_span)
+ScreenGui.Name = "DeltaSurgeHub"
+ScreenGui.ResetOnSpawn = false[span_108](start_span)[span_108](end_span)
+ScreenGui.Parent = TargetGui[span_109](start_span)[span_109](end_span)[span_110](start_span)[span_110](end_span)
+
+local MainWindow = Instance.new("Frame")[span_111](start_span)[span_111](end_span)[span_112](start_span)[span_112](end_span)
+MainWindow.Name = "MainWindow"
+MainWindow.Size = UDim2.new(0, 0, 0, 0)
+MainWindow.Position = UDim2.new(0.5, 0, 0.5, 0)
+MainWindow.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+MainWindow.BorderSizePixel = 0[span_113](start_span)[span_113](end_span)[span_114](start_span)[span_114](end_span)
+MainWindow.Active = true[span_115](start_span)[span_115](end_span)[span_116](start_span)[span_116](end_span)
+MainWindow.Draggable = true[span_117](start_span)[span_117](end_span)[span_118](start_span)[span_118](end_span)
+MainWindow.ClipsDescendants = true
+MainWindow.Visible = false[span_119](start_span)[span_119](end_span)
+MainWindow.Parent = ScreenGui[span_120](start_span)[span_120](end_span)[span_121](start_span)[span_121](end_span)
+
+local MainCorner = Instance.new("UICorner")[span_122](start_span)[span_122](end_span)[span_123](start_span)[span_123](end_span)
+MainCorner.CornerRadius = UDim.new(0, 12)[span_124](start_span)[span_124](end_span)[span_125](start_span)[span_125](end_span)
+MainCorner.Parent = MainWindow[span_126](start_span)[span_126](end_span)[span_127](start_span)[span_127](end_span)
+
+local MainStroke = Instance.new("UIStroke")[span_128](start_span)[span_128](end_span)[span_129](start_span)[span_129](end_span)
+MainStroke.Color = Color3.fromRGB(0, 170, 255)[span_130](start_span)[span_130](end_span)[span_131](start_span)[span_131](end_span)
+MainStroke.Thickness = 2[span_132](start_span)[span_132](end_span)[span_133](start_span)[span_133](end_span)
+MainStroke.Parent = MainWindow[span_134](start_span)[span_134](end_span)[span_135](start_span)[span_135](end_span)
+
+local TopBar = Instance.new("Frame")[span_136](start_span)[span_136](end_span)[span_137](start_span)[span_137](end_span)
+TopBar.Name = "TopBar"
+TopBar.Size = UDim2.new(1, 0, 0, 42)
+TopBar.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+TopBar.BorderSizePixel = 0[span_138](start_span)[span_138](end_span)[span_139](start_span)[span_139](end_span)
+TopBar.Parent = MainWindow[span_140](start_span)[span_140](end_span)[span_141](start_span)[span_141](end_span)
+
+local TopBarCorner = Instance.new("UICorner")[span_142](start_span)[span_142](end_span)[span_143](start_span)[span_143](end_span)
+TopBarCorner.CornerRadius = UDim.new(0, 12)[span_144](start_span)[span_144](end_span)[span_145](start_span)[span_145](end_span)
+TopBarCorner.Parent = TopBar[span_146](start_span)[span_146](end_span)[span_147](start_span)[span_147](end_span)
+
+local TitleLabel = Instance.new("TextLabel")[span_148](start_span)[span_148](end_span)[span_149](start_span)[span_149](end_span)
+TitleLabel.Size = UDim2.new(1, -50, 1, 0)
+TitleLabel.Position = UDim2.new(0, 15, 0, 0)[span_150](start_span)[span_150](end_span)[span_151](start_span)[span_151](end_span)
+TitleLabel.BackgroundTransparency = 1[span_152](start_span)[span_152](end_span)[span_153](start_span)[span_153](end_span)
+TitleLabel.Text = "⚡ DELTA SURGE HUB -- V.8 (STAND EDITION)"
+TitleLabel.TextColor3 = Color3.fromRGB(0, 170, 255)
+TitleLabel.Font = Enum.Font.GothamBold[span_154](start_span)[span_154](end_span)[span_155](start_span)[span_155](end_span)
+TitleLabel.TextSize = 13
+TitleLabel.TextXAlignment = Enum.TextXAlignment.Left[span_156](start_span)[span_156](end_span)[span_157](start_span)[span_157](end_span)
+TitleLabel.Parent = TopBar[span_158](start_span)[span_158](end_span)[span_159](start_span)[span_159](end_span)
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 30, 0, 30)
+CloseBtn.Position = UDim2.new(1, -36, 0, 6)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(220, 40, 40)
+CloseBtn.Text = "✕"
+CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 13
+CloseBtn.Parent = TopBar
+
+local CloseCorner = Instance.new("UICorner")
+CloseCorner.CornerRadius = UDim.new(0, 6)
+CloseCorner.Parent = CloseBtn
+
+local Sidebar = Instance.new("Frame")[span_160](start_span)[span_160](end_span)[span_161](start_span)[span_161](end_span)
+Sidebar.Name = "Sidebar"
+Sidebar.Size = UDim2.new(0, 115, 1, -42)
+Sidebar.Position = UDim2.new(0, 0, 0, 42)
+Sidebar.BackgroundColor3 = Color3.fromRGB(15, 15, 18)
+Sidebar.BorderSizePixel = 0[span_162](start_span)[span_162](end_span)[span_163](start_span)[span_163](end_span)
+Sidebar.Parent = MainWindow[span_164](start_span)[span_164](end_span)[span_165](start_span)[span_165](end_span)
+
+local ContentContainer = Instance.new("Folder")[span_166](start_span)[span_166](end_span)[span_167](start_span)[span_167](end_span)
+ContentContainer.Name = "ContentContainer"
+ContentContainer.Parent = MainWindow[span_168](start_span)[span_168](end_span)[span_169](start_span)[span_169](end_span)
+
+local tabNames = {"Home", "Combat", "Movement", "Misc"}[span_170](start_span)[span_170](end_span)[span_171](start_span)[span_171](end_span)
+local pages = {}
+local tabButtons = {}
+
+for i, tName in ipairs(tabNames) do[span_172](start_span)[span_172](end_span)[span_173](start_span)[span_173](end_span)
+    local tabBtn = Instance.new("TextButton")[span_174](start_span)[span_174](end_span)[span_175](start_span)[span_175](end_span)
+    tabBtn.Name = tName .. "TabBtn"
+    tabBtn.Size = UDim2.new(1, -12, 0, 34)
+    tabBtn.Position = UDim2.new(0, 6, 0, 10 + (i - 1) * 40)[span_176](start_span)[span_176](end_span)[span_177](start_span)[span_177](end_span)
+    tabBtn.BackgroundColor3 = (i == 1) and Color3.fromRGB(0, 170, 255) or Color3.fromRGB(25, 25, 32)[span_178](start_span)[span_178](end_span)[span_179](start_span)[span_179](end_span)
+    tabBtn.Text = tName[span_180](start_span)[span_180](end_span)[span_181](start_span)[span_181](end_span)
+    tabBtn.TextColor3 = Color3.fromRGB(255, 255, 255)[span_182](start_span)[span_182](end_span)[span_183](start_span)[span_183](end_span)
+    tabBtn.Font = Enum.Font.GothamSemibold[span_184](start_span)[span_184](end_span)[span_185](start_span)[span_185](end_span)
+    tabBtn.TextSize = 12[span_186](start_span)[span_186](end_span)[span_187](start_span)[span_187](end_span)
+    tabBtn.Parent = Sidebar[span_188](start_span)[span_188](end_span)[span_189](start_span)[span_189](end_span)
+
+    local tCorner = Instance.new("UICorner")[span_190](start_span)[span_190](end_span)[span_191](start_span)[span_191](end_span)
+    tCorner.CornerRadius = UDim.new(0, 6)
+    tCorner.Parent = tabBtn[span_192](start_span)[span_192](end_span)[span_193](start_span)[span_193](end_span)
+
+    local page = Instance.new("ScrollingFrame")[span_194](start_span)[span_194](end_span)[span_195](start_span)[span_195](end_span)
+    page.Name = tName .. "Page"
+    page.Size = UDim2.new(1, -125, 1, -52)
+    page.Position = UDim2.new(0, 120, 0, 47)
+    page.BackgroundTransparency = 1[span_196](start_span)[span_196](end_span)[span_197](start_span)[span_197](end_span)
+    page.BorderSizePixel = 0[span_198](start_span)[span_198](end_span)[span_199](start_span)[span_199](end_span)
+    page.ScrollBarThickness = 4[span_200](start_span)[span_200](end_span)[span_201](start_span)[span_201](end_span)
+    page.ScrollBarImageColor3 = Color3.fromRGB(0, 170, 255)
+    page.CanvasSize = UDim2.new(0, 0, 0, 650)
+    page.Visible = (i == 1)[span_202](start_span)[span_202](end_span)[span_203](start_span)[span_203](end_span)
+    page.Parent = ContentContainer[span_204](start_span)[span_204](end_span)[span_205](start_span)[span_205](end_span)
+
+    pages[tName] = page
+    tabButtons[tName] = tabBtn
+
+    tabBtn.MouseButton1Click:Connect(function()[span_206](start_span)[span_206](end_span)[span_207](start_span)[span_207](end_span)
+        for name, p in pairs(pages) do[span_208](start_span)[span_208](end_span)[span_209](start_span)[span_209](end_span)
+            p.Visible = (name == tName)[span_210](start_span)[span_210](end_span)[span_211](start_span)[span_211](end_span)
+        end
+        for name, b in pairs(tabButtons) do[span_212](start_span)[span_212](end_span)[span_213](start_span)[span_213](end_span)
+            TweenService:Create(b, TweenInfo.new(0.2), {[span_214](start_span)[span_214](end_span)[span_215](start_span)[span_215](end_span)
+                BackgroundColor3 = (name == tName) and Color3.fromRGB(0, 170, 255) or Color3.fromRGB(25, 25, 32)[span_216](start_span)[span_216](end_span)[span_217](start_span)[span_217](end_span)
+            }):Play()[span_218](start_span)[span_218](end_span)[span_219](start_span)[span_219](end_span)
+        end
+    end)
+end
+
+local isMenuVisible = false
+local function ToggleSurgeMenu(show)
+    isMenuVisible = show
+    if isMenuVisible then
+        MainWindow.Visible = true[span_220](start_span)[span_220](end_span)
+        MainWindow:TweenSizeAndPosition(
+            UDim2.new(0, 420, 0, 310),
+            UDim2.new(0.5, -210, 0.5, -155),
+            Enum.EasingDirection.Out,
+            Enum.EasingStyle.Back,
+            0.35,
+            true
+        )
+    else
+        MainWindow:TweenSizeAndPosition(
+            UDim2.new(0, 0, 0, 0),
+            UDim2.new(0.5, 0, 0.5, 0),
+            Enum.EasingDirection.In,
+            Enum.EasingStyle.Back,
+            0.25,
+            true,
+            function()
+                if not isMenuVisible then MainWindow.Visible = false end
+            end
+        )
+    end
+end
+
+CloseBtn.MouseButton1Click:Connect(function()
+    ToggleSurgeMenu(false)
+end)
+
+local FloatButton = Instance.new("TextButton")[span_221](start_span)[span_221](end_span)[span_222](start_span)[span_222](end_span)[span_223](start_span)[span_223](end_span)
+FloatButton.Name = "DeltaSurgeFloatBtn"
+FloatButton.Size = UDim2.new(0, 45, 0, 45)[span_224](start_span)[span_224](end_span)[span_225](start_span)[span_225](end_span)
+FloatButton.Position = UDim2.new(0, 15, 0.5, -22)
+FloatButton.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+FloatButton.Text = "⚡"
+FloatButton.TextSize = 20
+FloatButton.Active = true[span_226](start_span)[span_226](end_span)[span_227](start_span)[span_227](end_span)[span_228](start_span)[span_228](end_span)
+FloatButton.Draggable = true[span_229](start_span)[span_229](end_span)[span_230](start_span)[span_230](end_span)[span_231](start_span)[span_231](end_span)
+FloatButton.Parent = ScreenGui[span_232](start_span)[span_232](end_span)[span_233](start_span)[span_233](end_span)[span_234](start_span)[span_234](end_span)
+
+local FloatCorner = Instance.new("UICorner")[span_235](start_span)[span_235](end_span)[span_236](start_span)[span_236](end_span)[span_237](start_span)[span_237](end_span)
+FloatCorner.CornerRadius = UDim.new(1, 0)[span_238](start_span)[span_238](end_span)[span_239](start_span)[span_239](end_span)[span_240](start_span)[span_240](end_span)
+FloatCorner.Parent = FloatButton[span_241](start_span)[span_241](end_span)[span_242](start_span)[span_242](end_span)[span_243](start_span)[span_243](end_span)
+
+local FloatStroke = Instance.new("UIStroke")[span_244](start_span)[span_244](end_span)[span_245](start_span)[span_245](end_span)[span_246](start_span)[span_246](end_span)
+FloatStroke.Color = Color3.fromRGB(0, 170, 255)[span_247](start_span)[span_247](end_span)[span_248](start_span)[span_248](end_span)[span_249](start_span)[span_249](end_span)
+FloatStroke.Thickness = 2[span_250](start_span)[span_250](end_span)[span_251](start_span)[span_251](end_span)[span_252](start_span)[span_252](end_span)
+FloatStroke.Parent = FloatButton[span_253](start_span)[span_253](end_span)[span_254](start_span)[span_254](end_span)[span_255](start_span)[span_255](end_span)
+
+FloatButton.MouseButton1Click:Connect(function()[span_256](start_span)[span_256](end_span)[span_257](start_span)[span_257](end_span)
+    ToggleSurgeMenu(not isMenuVisible)[span_258](start_span)[span_258](end_span)[span_259](start_span)[span_259](end_span)
+end)
+
+task.delay(loadDuration + 0.4, function()
+    ToggleSurgeMenu(true)
+end)
+
+-- =====================================================================
+-- 6. Helper Components[span_260](start_span)[span_260](end_span)[span_261](start_span)[span_261](end_span)
+-- =====================================================================
+local function CreateSectionLabel(parent, text, yPos)
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -15, 0, 20)
+    label.Position = UDim2.new(0, 5, 0, yPos)
+    label.BackgroundColor3 = Color3.fromRGB(28, 28, 35)
+    label.Text = " " .. text
+    label.TextColor3 = Color3.fromRGB(0, 170, 255)
+    label.Font = Enum.Font.GothamBold
+    label.TextSize = 11
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = parent
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 4)
+    corner.Parent = label
+    return label
+end
+
+local function CreateToggleButton(parent, text, yPos, callback)[span_262](start_span)[span_262](end_span)
+    local button = Instance.new("TextButton")[span_263](start_span)[span_263](end_span)
+    button.Size = UDim2.new(1, -15, 0, 32)
+    button.Position = UDim2.new(0, 5, 0, yPos)
+    button.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+    button.Text = text .. ": ปิด"
+    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    button.Font = Enum.Font.GothamSemibold
+    button.TextSize = 12
+    button.Parent = parent
+
+    local corner = Instance.new("UICorner")[span_264](start_span)[span_264](end_span)
+    corner.CornerRadius = UDim.new(0, 6)
+    corner.Parent = button
+
+    local state = false
+    button.MouseButton1Click:Connect(function()[span_265](start_span)[span_265](end_span)
+        state = not state
+        button.BackgroundColor3 = state and Color3.fromRGB(0, 160, 80) or Color3.fromRGB(35, 35, 45)
+        button.Text = text .. (state and ": เปิด" or ": ปิด")
+        callback(state, button)
+    end)
+    return button
+end
+
+local function CreateActionBtn(parent, text, yPos, callback)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, -15, 0, 32)
+    btn.Position = UDim2.new(0, 5, 0, yPos)
+    btn.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
+    btn.Text = text
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 12
+    btn.Parent = parent
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 6)
+    corner.Parent = btn
+
+    btn.MouseButton1Click:Connect(callback)
+    return btn
+end
+
+local function CreateInputRow(parent, placeholder, yPos, callback)
+    local input = Instance.new("TextBox")
+    input.Size = UDim2.new(0.5, -12, 0, 28)
+    input.Position = UDim2.new(0, 5, 0, yPos)
+    input.BackgroundColor3 = Color3.fromRGB(28, 28, 35)
+    input.PlaceholderText = placeholder
+    input.TextColor3 = Color3.fromRGB(255, 255, 255)
+    input.Font = Enum.Font.Gotham
+    input.TextSize = 11
+    input.Parent = parent
+
+    local inCorner = Instance.new("UICorner")
+    inCorner.CornerRadius = UDim.new(0, 4)
+    inCorner.Parent = input
+
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0.5, -12, 0, 28)
+    btn.Position = UDim2.new(0.5, 3, 0, yPos)
+    btn.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
+    btn.Text = "บันทึกค่า"
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 11
+    btn.Parent = parent
+
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0, 4)
+    btnCorner.Parent = btn
+
+    btn.MouseButton1Click:Connect(function()
+        local val = tonumber(input.Text)
+        if val then callback(val) end
+    end)
+end
+
+-- =====================================================================
+-- 7. ติดตั้งแท็บและระบบการทำงานทั้งหมด (MODULES INTEGRATION)
+-- =====================================================================
+
+-- ---------------------------------------------------------------------
+-- [แท็บ 1: Home]
+-- ---------------------------------------------------------------------
+local homeP = pages["Home"]
+local userCard = Instance.new("Frame")
+userCard.Size = UDim2.new(1, -15, 0, 80)
+userCard.Position = UDim2.new(0, 5, 0, 10)
+userCard.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
+userCard.Parent = homeP
+
+local userCorner = Instance.new("UICorner")
+userCorner.CornerRadius = UDim.new(0, 8)
+userCorner.Parent = userCard
+
+local nameLabel = Instance.new("TextLabel")
+nameLabel.Size = UDim2.new(1, -20, 0, 25)
+nameLabel.Position = UDim2.new(0, 10, 0, 10)
+nameLabel.BackgroundTransparency = 1
+nameLabel.Text = "👤 ผู้เล่น: " .. LocalPlayer.DisplayName .. " (@" .. LocalPlayer.Name .. ")"
+nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+nameLabel.Font = Enum.Font.GothamBold
+nameLabel.TextSize = 13
+nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+nameLabel.Parent = userCard
+
+local placeLabel = Instance.new("TextLabel")
+placeLabel.Size = UDim2.new(1, -20, 0, 20)
+placeLabel.Position = UDim2.new(0, 10, 0, 35)
+placeLabel.BackgroundTransparency = 1
+placeLabel.Text = "🎮 Place ID: " .. tostring(game.PlaceId)
+placeLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
+placeLabel.Font = Enum.Font.Gotham
+placeLabel.TextSize = 11
+placeLabel.TextXAlignment = Enum.TextXAlignment.Left
+placeLabel.Parent = userCard
+
+local statusBadge = Instance.new("TextLabel")
+statusBadge.Size = UDim2.new(1, -20, 0, 20)
+statusBadge.Position = UDim2.new(0, 10, 0, 55)
+statusBadge.BackgroundTransparency = 1
+statusBadge.Text = "🛡️ สถานะ: Active (Bypass & Anti-Death Engine On)"
+statusBadge.TextColor3 = Color3.fromRGB(0, 255, 150)
+statusBadge.Font = Enum.Font.GothamSemibold
+statusBadge.TextSize = 11
+statusBadge.TextXAlignment = Enum.TextXAlignment.Left
+statusBadge.Parent = userCard
+
+-- ---------------------------------------------------------------------
+-- [แท็บ 2: Combat]
+-- ---------------------------------------------------------------------
+local combatP = pages["Combat"]
+
+-- ล็อกเป้า (Aimbot)
+CreateSectionLabel(combatP, "🎯 ระบบล็อกเป้ามุมกล้อง (Aimbot)", 10)
+local function GetClosestPlayerHead()
+    local closestHead, minDistance = nil, math.huge
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") then
+            local hum = player.Character:FindFirstChildOfClass("Humanoid")
+            if hum and hum.Health > 0 then
+                local screenPos, onScreen = Camera:WorldToViewportPoint(player.Character.Head.Position)
+                if onScreen then
+                    local dist = (Vector2.new(screenPos.X, screenPos.Y) - Vector2.new(Mouse.X, Mouse.Y)).Magnitude
+                    if dist < minDistance then
+                        minDistance = dist
+                        closestHead = player.Character.Head
+                    end
+                end
+            end
+        end
+    end
+    return closestHead
+end
+
+CreateToggleButton(combatP, "ล็อกเป้าผู้เล่นใกล้สุด", 35, function(state)
+    SurgeSettings.AimbotEnabled = state
+    if state then
+        SurgeConnections.Aimbot = RunService.RenderStepped:Connect(function()
+            pcall(function()
+                if SurgeSettings.AimbotEnabled then
+                    local targetHead = GetClosestPlayerHead()
+                    if targetHead then
+                        Camera.CFrame = CFrame.new(Camera.CFrame.Position, targetHead.Position)
+                    end
+                end
+            end)
+        end)
+    else
+        if SurgeConnections.Aimbot then SurgeConnections.Aimbot:Disconnect() end
+    end
+end)
+
+-- ขยายฮิตบ็อกซ์ (Hitbox Expander)
+CreateSectionLabel(combatP, "🥊 ขยายฮิตบ็อกซ์โจมตี (Hitbox Expander)", 75)
+CreateToggleButton(combatP, "เปิด Hitbox Expander", 100, function(state)
+    SurgeSettings.HitboxEnabled = state
+    if state then
+        SurgeConnections.Hitbox = RunService.RenderStepped:Connect(function()
+            pcall(function()
+                for _, player in ipairs(Players:GetPlayers()) do
+                    if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                        local hrp = player.Character.HumanoidRootPart
+                        hrp.Size = Vector3.new(SurgeSettings.HitboxSize, SurgeSettings.HitboxSize, SurgeSettings.HitboxSize)
+                        hrp.Transparency = 0.6
+                        hrp.BrickColor = BrickColor.new("Really blue")
+                        hrp.Material = Enum.Material.Neon
+                        hrp.CanCollide = false
+                    end
+                end
+            end)
+        end)
+    else
+        if SurgeConnections.Hitbox then SurgeConnections.Hitbox:Disconnect() end
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                local hrp = player.Character.HumanoidRootPart
+                hrp.Size = Vector3.new(2, 2, 1)
+                hrp.Transparency = 1
+            end
+        end
+    end
+end)
+CreateInputRow(combatP, "ขนาด Hitbox (ค่าเริ่มต้น 15)", 138, function(val)
+    SurgeSettings.HitboxSize = math.clamp(val, 2, 50)
+end)
+
+-- ---------------------------------------------------------------------
+-- [แท็บ 3: Movement]
+-- ---------------------------------------------------------------------
+local moveP = pages["Movement"]
+
+-- วิ่งไว (Speed)
+CreateSectionLabel(moveP, "⚡ วิ่งไว (Bypass Anti-Cheat)", 10)
+CreateToggleButton(moveP, "วิ่งไว (สุ่มพิกัดความเร็ว)", 35, function(state)[span_266](start_span)[span_266](end_span)
+    SurgeSettings.SpeedEnabled = state
+    if state then
+        SurgeConnections.Speed = RunService.Heartbeat:Connect(function()[span_267](start_span)[span_267](end_span)
+            pcall(function()[span_268](start_span)[span_268](end_span)
+                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then[span_269](start_span)[span_269](end_span)
+                    LocalPlayer.Character.Humanoid.WalkSpeed = SurgeSettings.WalkSpeed + math.random(-1, 1)
+                end
+            end)
+        end)
+    else
+        if SurgeConnections.Speed then SurgeConnections.Speed:Disconnect() end
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.WalkSpeed = 16
+        end
+    end
+end)
+CreateInputRow(moveP, "กำหนดความเร็ว (ค่าเริ่มต้น 50)", 73, function(val)
+    SurgeSettings.WalkSpeed = math.clamp(val, 16, 500)[span_270](start_span)[span_270](end_span)
+end)
+
+-- บังคับพลังกระโดด (JumpPower)
+CreateSectionLabel(moveP, "🦘 พลังกระโดด (JumpPower)", 110)
+CreateToggleButton(moveP, "เปิดใช้พลังกระโดด", 135, function(state)
+    SurgeSettings.JumpPowerEnabled = state
+    if state then
+        SurgeConnections.JumpPower = RunService.Heartbeat:Connect(function()[span_271](start_span)[span_271](end_span)
+            pcall(function()[span_272](start_span)[span_272](end_span)
+                local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")[span_273](start_span)[span_273](end_span)
+                if hum then
+                    hum.UseJumpPower = true[span_274](start_span)[span_274](end_span)
+                    hum.JumpPower = SurgeSettings.JumpPower[span_275](start_span)[span_275](end_span)
+                end
+            end)
+        end)
+    else
+        if SurgeConnections.JumpPower then SurgeConnections.JumpPower:Disconnect() end
+        local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
+        if hum then hum.JumpPower = 50 end
+    end
+end)
+CreateInputRow(moveP, "กำหนดพลังกระโดด (เช่น 100)", 173, function(val)
+    SurgeSettings.JumpPower = math.clamp(val, 50, 1000)[span_276](start_span)[span_276](end_span)
+end)
+
+-- กระโดดไม่จำกัด (Infinite Jump)
+CreateSectionLabel(moveP, "♾️ กระโดดกลางอากาศ (Infinite Jump)", 210)
+CreateToggleButton(moveP, "กระโดดไม่จำกัด", 235, function(state)[span_277](start_span)[span_277](end_span)
+    SurgeSettings.InfJumpEnabled = state
+    if state then
+        SurgeConnections.InfJump = UserInputService.JumpRequest:Connect(function()[span_278](start_span)[span_278](end_span)
+            pcall(function()[span_279](start_span)[span_279](end_span)
+                if SurgeSettings.InfJumpEnabled and LocalPlayer.Character then[span_280](start_span)[span_280](end_span)
+                    local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")[span_281](start_span)[span_281](end_span)
+                    if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end[span_282](start_span)[span_282](end_span)
+                end
+            end)
+        end)
+    else
+        if SurgeConnections.InfJump then SurgeConnections.InfJump:Disconnect() end
+    end
+end)
+
+-- Noclip ทะลุกำแพง[span_283](start_span)[span_283](end_span)
+CreateSectionLabel(moveP, "👻 ทะลุกำแพง (Universal Noclip)", 275)
+CreateToggleButton(moveP, "เดินทะลุสิ่งกีดขวาง", 300, function(state)[span_284](start_span)[span_284](end_span)
+    SurgeSettings.NoclipEnabled = state
+    if state then
+        SurgeConnections.Noclip = RunService.Stepped:Connect(function()[span_285](start_span)[span_285](end_span)
+            pcall(function()
+                if SurgeSettings.NoclipEnabled and LocalPlayer.Character then[span_286](start_span)[span_286](end_span)
+                    for _, part in ipairs(LocalPlayer.Character:GetDescendants()) do[span_287](start_span)[span_287](end_span)
+                        if part:IsA("BasePart") then[span_288](start_span)[span_288](end_span)
+                            part.CanCollide = false[span_289](start_span)[span_289](end_span)
+                        end
+                    end
+                end
+            end)
+        end)
+    else
+        if SurgeConnections.Noclip then SurgeConnections.Noclip:Disconnect() end
+    end
+end)
+
+-- บินด้วยปุ่มในมือถือ (Native Mobile Controls Integration)[span_290](start_span)[span_290](end_span)
+CreateSectionLabel(moveP, "✈️ บินด้วยปุ่มในเกม (Native Mobile & Anti-Death)", 340)
+CreateToggleButton(moveP, "เปิดระบบบิน (อนาล็อก+ปุ่มโดด)", 365, function(state)
+    SurgeSettings.FlyEnabled = state
+    local char = LocalPlayer.Character
+    if not char then return end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChild("Humanoid")
+
+    if state then
+        if root and hum then
+            FlyBodyVelocity = Instance.new("BodyVelocity")[span_291](start_span)[span_291](end_span)
+            FlyBodyVelocity.Name = "SurgeFlyVelocity"
+            FlyBodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)[span_292](start_span)[span_292](end_span)
+            FlyBodyVelocity.Velocity = Vector3.new(0, 0, 0)[span_293](start_span)[span_293](end_span)
+            FlyBodyVelocity.Parent = root[span_294](start_span)[span_294](end_span)
+            
+            FlyBodyGyro = Instance.new("BodyGyro")[span_295](start_span)[span_295](end_span)
+            FlyBodyGyro.Name = "SurgeFlyGyro"
+            FlyBodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)[span_296](start_span)[span_296](end_span)
+            FlyBodyGyro.CFrame = root.CFrame[span_297](start_span)[span_297](end_span)
+            FlyBodyGyro.Parent = root[span_298](start_span)[span_298](end_span)
+            
+            hum:ChangeState(Enum.HumanoidStateType.Running)
+            
+            SurgeConnections.Fly = RunService.RenderStepped:Connect(function()[span_299](start_span)[span_299](end_span)
+                pcall(function()
+                    if not SurgeSettings.FlyEnabled or not root or not FlyBodyVelocity or not FlyBodyGyro then return end
+                    
+                    for _, p in ipairs(char:GetDescendants()) do
+                        if p:IsA("BasePart") then
+                            p.CanTouch = false
+                            p.CanCollide = false
+                        end
+                    end
+                    
+                    hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+                    hum:SetStateEnabled(Enum.HumanoidStateType.Freefall, false)
+                    hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+                    
+                    local moveDir = Vector3.new(0, 0, 0)[span_300](start_span)[span_300](end_span)
+                    
+                    if hum.MoveDirection.Magnitude > 0 then
+                        moveDir = moveDir + (Camera.CFrame.LookVector * hum.MoveDirection.Z * -1) + (Camera.CFrame.RightVector * hum.MoveDirection.X)
+                    end
+                    
+                    if UserInputService:IsKeyDown(Enum.KeyCode.Space) or hum.Jump then
+                        moveDir = moveDir + Vector3.new(0, 1, 0)
+                    end
+                    
+                    if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir = moveDir + Camera.CFrame.LookVector end[span_301](start_span)[span_301](end_span)
+                    if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir = moveDir - Camera.CFrame.LookVector end[span_302](start_span)[span_302](end_span)
+                    if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir - Camera.CFrame.RightVector end[span_303](start_span)[span_303](end_span)
+                    if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + Camera.CFrame.RightVector end[span_304](start_span)[span_304](end_span)
+                    if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then moveDir = moveDir - Vector3.new(0, 1, 0) end
+                    
+                    if moveDir.Magnitude > 0 then
+                        FlyBodyVelocity.Velocity = moveDir.Unit * SurgeSettings.FlySpeed[span_305](start_span)[span_305](end_span)
+                    else
+                        FlyBodyVelocity.Velocity = Vector3.new(0, 0, 0)
+                    end
+                    FlyBodyGyro.CFrame = Camera.CFrame[span_306](start_span)[span_306](end_span)
+                end)
+            end)
+        end
+    else
+        if SurgeConnections.Fly then SurgeConnections.Fly:Disconnect() end[span_307](start_span)[span_307](end_span)
+        if FlyBodyVelocity then FlyBodyVelocity:Destroy() end[span_308](start_span)[span_308](end_span)
+        if FlyBodyGyro then FlyBodyGyro:Destroy() end[span_309](start_span)[span_309](end_span)
+        if hum then
+            hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
+            hum:SetStateEnabled(Enum.HumanoidStateType.Freefall, true)
+            hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
+            hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+        end
+        if char then
+            for _, p in ipairs(char:GetDescendants()) do
+                if p:IsA("BasePart") then
+                    p.CanTouch = true
+                    if not SurgeSettings.NoclipEnabled then p.CanCollide = true end
+                end
+            end
+        end
+    end
+end)
+CreateInputRow(moveP, "ความเร็วการบิน (เช่น 50)", 403, function(val)[span_310](start_span)[span_310](end_span)
+    SurgeSettings.FlySpeed = math.clamp(val, 10, 300)[span_311](start_span)[span_311](end_span)
+end)
+
+-- [ฟังก์ชันใหม่ 1] ระบบการล่องหน (Invisibility Engine)
+CreateSectionLabel(moveP, "👤 ระบบล่องหน (Invisibility Mode)", 440)
+CreateToggleButton(moveP, "เปิดระบบล่องหน", 465, function(state)
+    SurgeSettings.InvisibleEnabled = state
+    local char = LocalPlayer.Character
+    if not char then return end
+    
+    pcall(function()
+        for _, part in ipairs(char:GetDescendants()) do
+            if part:IsA("BasePart") or part:IsA("Decal") then
+                if state then
+                    if not originalMaterials[part] then
+                        originalMaterials[part] = {Transparency = part.Transparency}
+                    end
+                    part.Transparency = 1
+                else
+                    if originalMaterials[part] then
+                        part.Transparency = originalMaterials[part].Transparency
+                    else
+                        part.Transparency = 0
+                    end
+                end
+            end
+        end
+    end)
+end)
+
+-- วาปคลิก & Safe Tween
+CreateSectionLabel(moveP, "📍 วาปคลิก & Safe Tween TP", 505)
+CreateToggleButton(moveP, "คลิกเพื่อวาป", 530, function(state)
+    SurgeSettings.TeleportEnabled = state
+    if state then
+        SurgeConnections.Teleport = Mouse.Button1Down:Connect(function()
+            pcall(function()
+                if SurgeSettings.TeleportEnabled and LocalPlayer.Character then
+                    local targetPosition = GetHumanlikeOffset(Mouse.Hit.Position) + Vector3.new(0, 3, 0)
+                    LocalPlayer.Character:PivotTo(CFrame.new(targetPosition))
+                end
+            end)
+        end)
+    else
+        if SurgeConnections.Teleport then SurgeConnections.Teleport:Disconnect() end
+    end
+end)
+
+local function SafeTweenTeleport(targetPos)[span_312](start_span)[span_312](end_span)
+    local char = LocalPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    local root = char.HumanoidRootPart
+    
+    local distance = (root.Position - targetPos).Magnitude
+    local speed = 80[span_313](start_span)[span_313](end_span)
+    local duration = distance / speed[span_314](start_span)[span_314](end_span)
+
+    local tween = TweenService:Create(root, TweenInfo.new(duration, Enum.EasingStyle.Linear), {CFrame = CFrame.new(targetPos)})[span_315](start_span)[span_315](end_span)
+    local conn
+    conn = RunService.Heartbeat:Connect(function()
+        if root then root.AssemblyLinearVelocity = Vector3.zero end[span_316](start_span)[span_316](end_span)
+    end)
+    
+    tween:Play()
+    tween.Completed:Connect(function()
+        if conn then conn:Disconnect() end
+    end)
+end
+
+CreateActionBtn(moveP, "วาร์ปความเร็วคงที่ (Safe Tween)", 570, function()[span_317](start_span)[span_317](end_span)
+    SafeTweenTeleport(Mouse.Hit.Position + Vector3.new(0, 3, 0))[span_318](start_span)[span_318](end_span)
+end)
+
+-- ---------------------------------------------------------------------
+-- [แท็บ 4: Misc] อื่นๆ (เพิ่ม Potato Graphics & JoJo Time Stop)
+-- ---------------------------------------------------------------------
+local miscP = pages["Misc"]
+
+-- [ฟังก์ชันใหม่ 2] ระบบภาพมันฝรั่งบดบูสต์ FPS (Potato Graphics)
+CreateSectionLabel(miscP, "🥔 กราฟิกมันฝรั่งบด (Potato FPS Boost)", 10)
+CreateToggleButton(miscP, "เปิดภาพมันฝรั่งบด (สมูท FPS พุ่ง)", 35, function(state)
+    SurgeSettings.PotatoGraphicsEnabled = state
+    pcall(function()
+        if state then
+            Lighting.GlobalShadows = false
+            Lighting.FogEnd = 9e9
+            settings().Rendering.QualityLevel = 1
+            for _, v in ipairs(game:GetDescendants()) do
+                if v:IsA("BasePart") and not v:IsA("MeshPart") then
+                    v.Material = Enum.Material.SmoothPlastic
+                    v.Reflectance = 0
+                elseif v:IsA("Decal") or v:IsA("Texture") then
+                    v.Transparency = 1
+                elseif v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Smoke") or v:IsA("Fire") then
+                    v.Enabled = false
+                end
+            end
+        else
+            Lighting.GlobalShadows = true
+            for _, v in ipairs(game:GetDescendants()) do
+                if v:IsA("Decal") or v:IsA("Texture") then
+                    v.Transparency = 0
+                elseif v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Smoke") or v:IsA("Fire") then
+                    v.Enabled = true
+                end
+            end
+        end
+    end)
+end)
+
+-- [ฟังก์ชันใหม่ 3] ระบบหยุดเวลาของโจโจ้ (The World - Time Stop)
+CreateSectionLabel(miscP, "⏳ หยุดเวลาโจโจ้ (The World Time Stop)", 75)
+local recordedPosition = nil
+
+local function PlayTimeStopEffect()
+    local fxScreen = Instance.new("ScreenGui")
+    fxScreen.Name = "TimeStopFX"
+    fxScreen.IgnoreGuiInset = true
+    fxScreen.Parent = TargetGui
+
+    local flashFrame = Instance.new("Frame")
+    flashFrame.Size = UDim2.new(1, 0, 1, 0)
+    flashFrame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    flashFrame.BackgroundTransparency = 0.2
+    flashFrame.BorderSizePixel = 0
+    flashFrame.Parent = fxScreen
+
+    local cc = Instance.new("ColorCorrectionEffect")
+    cc.Name = "TimeStopCC"
+    cc.Saturation = -1
+    cc.Contrast = 0.5
+    cc.TintColor = Color3.fromRGB(150, 150, 255)
+    cc.Parent = Lighting
+
+    TweenService:Create(flashFrame, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 1}):Play()
+    task.delay(0.5, function()
+        flashFrame:Destroy()
+    end)
+end
+
+local function RemoveTimeStopEffect()
+    local cc = Lighting:FindFirstChild("TimeStopCC")
+    if cc then cc:Destroy() end
+    local fxScreen = TargetGui:FindFirstChild("TimeStopFX")
+    if fxScreen then fxScreen:Destroy() end
+end
+
+CreateToggleButton(miscP, "THE WORLD! (หยุดเวลา)", 100, function(state)
+    SurgeSettings.TimeStopEnabled = state
+    local char = LocalPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    
+    if state then
+        -- เล่นเอฟเฟกต์หยุดเวลา
+        PlayTimeStopEffect()
+        
+        -- บันทึกพิกัดก่อนเริ่มเดินช่วงหยุดเวลา
+        recordedPosition = char.HumanoidRootPart.Position
+        
+        -- แช่แข็งทุกคนในเซิร์ฟเวอร์เฉพาะมุมมองของเรา (Client-Side)
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and p.Character then
+                for _, part in ipairs(p.Character:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        timeStoppedParts[part] = part.Anchored
+                        part.Anchored = true
+                    end
+                end
+                local hum = p.Character:FindFirstChildOfClass("Humanoid")
+                if hum then
+                    for _, track in ipairs(hum:GetPlayingAnimationTracks()) do
+                        track:AdjustSpeed(0)
+                        table.insert(frozenTracks, track)
+                    end
+                end
+            end
+        end
+    else
+        -- ปลดล็อกเอฟเฟกต์สีหน้าจอ
+        RemoveTimeStopEffect()
+        
+        -- วาร์ปส่งเราไปยังตำแหน่งปัจจุบันที่เดินแวะไป และแสดงผล
+        local finalPosition = char.HumanoidRootPart.Position
+        char:PivotTo(CFrame.new(finalPosition))
+        
+        -- ปลดการแช่แข็งของทุกคนให้กลับมาเคลื่อนไหวตามปกติ
+        for part, originalAnchored in pairs(timeStoppedParts) do
+            if part and part.Parent then
+                part.Anchored = originalAnchored
+            end
+        end
+        timeStoppedParts = {}
+        
+        for _, track in ipairs(frozenTracks) do
+            if track then track:AdjustSpeed(1) end
+        end
+        frozenTracks = {}
+        recordedPosition = nil
+    end
+end)
+
+-- ESP มองทะลุ[span_319](start_span)[span_319](end_span)
+CreateSectionLabel(miscP, "👁️ มองทะลุผู้เล่น (Player ESP)", 140)
+CreateToggleButton(miscP, "เปิด ESP ผู้เล่น", 165, function(state)[span_320](start_span)[span_320](end_span)
+    SurgeSettings.ESPEnabled = state
+    if state then
+        for _, player in pairs(Players:GetPlayers()) do[span_321](start_span)[span_321](end_span)
+            if player ~= LocalPlayer and player.Character and not player.Character:FindFirstChild("SurgeESP") then[span_322](start_span)[span_322](end_span)
+                local hl = Instance.new("Highlight")[span_323](start_span)[span_323](end_span)
+                hl.Name = "SurgeESP"
+                hl.FillColor = Color3.fromRGB(0, 170, 255)
+                hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+                hl.Parent = player.Character[span_324](start_span)[span_324](end_span)
+                SurgeESPObjects[player] = hl
+            end
+        end
+    else
+        for _, hl in pairs(SurgeESPObjects) do[span_325](start_span)[span_325](end_span)
+            if hl and hl.Parent then hl:Destroy() end[span_326](start_span)[span_326](end_span)
+        end
+        SurgeESPObjects = {}
+    end
+end)
+
+-- Anti-AFK[span_327](start_span)[span_327](end_span)[span_328](start_span)[span_328](end_span)
+CreateSectionLabel(miscP, "🛡️ กันหลุดข้ามคืน (Ultimate Anti-AFK)", 205)
+CreateToggleButton(miscP, "เปิดระบบ Anti-AFK สองชั้น", 230, function(state)[span_329](start_span)[span_329](end_span)[span_330](start_span)[span_330](end_span)
+    SurgeSettings.AntiAFKEnabled = state
+    if state then
+        SurgeConnections.AntiAFK = LocalPlayer.Idled:Connect(function()[span_331](start_span)[span_331](end_span)[span_332](start_span)[span_332](end_span)
+            pcall(function()[span_333](start_span)[span_333](end_span)[span_334](start_span)[span_334](end_span)
+                VirtualUser:CaptureController()[span_335](start_span)[span_335](end_span)[span_336](start_span)[span_336](end_span)
+                VirtualUser:ClickButton2(Vector2.new())[span_337](start_span)[span_337](end_span)[span_338](start_span)[span_338](end_span)
+            end)
+        end)
+        task.spawn(function()[span_339](start_span)[span_339](end_span)[span_340](start_span)[span_340](end_span)
+            while SurgeSettings.AntiAFKEnabled do[span_341](start_span)[span_341](end_span)[span_342](start_span)[span_342](end_span)
+                task.wait(150)[span_343](start_span)[span_343](end_span)[span_344](start_span)[span_344](end_span)
+                pcall(function()[span_345](start_span)[span_345](end_span)[span_346](start_span)[span_346](end_span)
+                    local char = LocalPlayer.Character[span_347](start_span)[span_347](end_span)[span_348](start_span)[span_348](end_span)
+                    if char and char:FindFirstChild("Humanoid") then[span_349](start_span)[span_349](end_span)[span_350](start_span)[span_350](end_span)
+                        char.Humanoid.Jump = true[span_351](start_span)[span_351](end_span)[span_352](start_span)[span_352](end_span)
+                    end
+                end)
+            end
+        end)
+    else
+        if SurgeConnections.AntiAFK then SurgeConnections.AntiAFK:Disconnect() end[span_353](start_span)[span_353](end_span)
+    end
+end)
+
+-- Server Hop[span_354](start_span)[span_354](end_span)[span_355](start_span)[span_355](end_span)
+CreateSectionLabel(miscP, "🌐 ย้ายห้องคนน้อย (Smart Server Hop)", 270)
+CreateActionBtn(miscP, "ย้ายเซิร์ฟเวอร์ทันที (Smart Hop)", 295, function()[span_356](start_span)[span_356](end_span)[span_357](start_span)[span_357](end_span)
+    pcall(function()[span_358](start_span)[span_358](end_span)[span_359](start_span)[span_359](end_span)
+        local placeId = game.PlaceId[span_360](start_span)[span_360](end_span)
+        local currentJobId = game.JobId[span_361](start_span)[span_361](end_span)
+        local sfUrl = string.format("https://games.roblox.com/v1/games/%d/servers/Public?sortOrder=Asc&limit=100", placeId)[span_362](start_span)[span_362](end_span)
+        local req = (syn and syn.request) or (http and http.request) or http_request or request
+        
+        if req then
+            local response = req({Url = sfUrl, Method = "GET"})[span_363](start_span)[span_363](end_span)
+            local data = HttpService:JSONDecode(response.Body)
+            if data and data.data then
+                for _, server in ipairs(data.data) do
+                    if server.playing < server.maxPlayers and server.id ~= currentJobId and server.playing >= 1 then[span_364](start_span)[span_364](end_span)
+                        TeleportService:TeleportToPlaceInstance(placeId, server.id, LocalPlayer)[span_365](start_span)[span_365](end_span)
+                        break
+                    end
+                end
+            end
+        else
+            TeleportService:Teleport(placeId, LocalPlayer)
+        end
+    end)
+end)
+
+-- =====================================================================
+-- 8. ระบบเกิดใหม่ผูกการทำงานอัตโนมัติ (Respawn Auto-Enforce)[span_366](start_span)[span_366](end_span)[span_367](start_span)[span_367](end_span)
+-- =====================================================================
+LocalPlayer.CharacterAdded:Connect(function()[span_368](start_span)[span_368](end_span)[span_369](start_span)[span_369](end_span)
+    task.wait(0.5)
+    if SurgeSettings.ESPEnabled then
+        for _, player in pairs(Players:GetPlayers()) do[span_370](start_span)[span_370](end_span)
+            if player ~= LocalPlayer and player.Character and not player.Character:FindFirstChild("SurgeESP") then[span_371](start_span)[span_371](end_span)
+                local hl = Instance.new("Highlight")[span_372](start_span)[span_372](end_span)
+                hl.Name = "SurgeESP"
+                hl.FillColor = Color3.fromRGB(0, 170, 255)
+                hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+                hl.Parent = player.Character[span_373](start_span)[span_373](end_span)
+                SurgeESPObjects[player] = hl
+            end
+        end
+    end
+end)
+
+print("=====================================================")
+print("⚡ DELTA SURGE HUB V.8 (STAND EDITION) โหลดเสร็จสมบูรณ์ 100%!")[span_374](start_span)[span_374](end_span)
+print("=====================================================")
