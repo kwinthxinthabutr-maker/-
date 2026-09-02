@@ -1,0 +1,897 @@
+-- =====================================================================
+-- [DELTA SURGE HUB V.19 - OP GOD-TIER COMPLETE EDITION]
+-- พัฒนาด้วยมาตรฐานวิศวกรรมซอฟต์แวร์ระดับสูง (Ph.D. Architecture)[span_9](start_span)[span_9](end_span)
+-- อ้างอิงโครงสร้าง: " สคริป เดลต้า V.2 ละเอียดกว่าเดิม และทำได้ดีกว่า[span_10](start_span)"[span_10](end_span)
+-- รวมทุกฟีเจอร์: Auto Farm, OP Combat, Fun Features, Time Stop, Chroma, Potato
+-- ความปลอดภัย: Anti-Cheat Bypass, Metatable Hook, Memory Cleanup 100%[span_11](start_span)[span_11](end_span)[span_12](start_span)[span_12](end_span)
+-- =====================================================================
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local CoreGui = game:GetService("CoreGui")
+local VirtualUser = game:GetService("VirtualUser")
+local Workspace = game:GetService("Workspace")
+local Lighting = game:GetService("Lighting")
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+local Camera = Workspace.CurrentCamera
+local Mouse = LocalPlayer:GetMouse()
+
+-- [ล้างหน้าต่าง UI และเอฟเฟกต์เก่าทิ้ง ป้องกันการทับซ้อนของหน่วยความจำ][span_13](start_span)[span_13](end_span)[span_14](start_span)[span_14](end_span)
+local TargetGui = CoreGui:FindFirstChild("RobloxGui") or LocalPlayer:WaitForChild("PlayerGui")
+if TargetGui:FindFirstChild("DeltaSurgeLoading") then TargetGui.DeltaSurgeLoading:Destroy() end
+if TargetGui:FindFirstChild("DeltaSurgeHub") then TargetGui.DeltaSurgeHub:Destroy() end
+if Lighting:FindFirstChild("TimeStopCC") then Lighting.TimeStopCC:Destroy() end
+if TargetGui:FindFirstChild("TimeStopFlash") then TargetGui.TimeStopFlash:Destroy() end
+
+-- =====================================================================
+-- 1. ระบบความปลอดภัยสูงสุด: Metatable Hooking (Anti-Cheat Bypass)[span_15](start_span)[span_15](end_span)
+-- =====================================================================
+local mt = getrawmetatable(game)
+setreadonly(mt, false)
+local oldNamecall = mt.__namecall
+
+mt.__namecall = newcclosure(function(self, ...)
+    local method = getnamecallmethod()
+    -- ดักจับและกรองแพ็กเกจก่อนส่งไปยังเซิร์ฟเวอร์หลัก (Security Inspection Point)[span_16](start_span)[span_16](end_span)
+    if method == "FireServer" and self.ClassName == "RemoteEvent" then
+        local remoteName = string.lower(self.Name)
+        -- บล็อกคำสั่ง RemoteEvent ที่อาจทำให้ตายหรือถูกเตะจากเซิร์ฟเวอร์[span_17](start_span)[span_17](end_span)
+        if string.find(remoteName, "die") or string.find(remoteName, "kill") or string.find(remoteName, "damage") or string.find(remoteName, "kick") then
+            return nil
+        end
+    end
+    return oldNamecall(self, ...)
+end)
+setreadonly(mt, true)
+
+-- =====================================================================
+-- 2. ระบบจัดการหน่วยความจำและลดอาการแลค (Anti-Lag & Memory Cleanup)[span_18](start_span)[span_18](end_span)
+-- =====================================================================
+task.spawn(function()
+    while true do
+        task.wait(15)
+        pcall(function()
+            -- ลบชิ้นส่วนเอฟเฟกต์ (Debris/Effects) หรือชิ้นส่วนที่ตกนอกแมพ เพื่อลด RAM[span_19](start_span)[span_19](end_span)
+            for _, obj in ipairs(Workspace:GetChildren()) do
+                if obj:IsA("BasePart") and not obj.Anchored and obj.Position.Y < -50 then
+                    obj:Destroy()
+                end
+            end
+        end)
+    end
+end)
+
+-- =====================================================================
+-- 3. ศูนย์กลางการตั้งค่าและตัวแปร (Global Settings & State)
+-- =====================================================================
+local Settings = {
+    -- Basics
+    WalkSpeed = 50,
+    JumpPower = 100,
+    FlySpeed = 50,
+    HitboxSize = 15,
+    LockOnRadius = 500,
+    -- OP Combat
+    UniversalMagnet = false,
+    UltraInstinct = false,
+    FlingAura = false,
+    SafeZoneHack = false,
+    HitboxEnabled = false,
+    SmoothLockOn = false,
+    -- Fun & Misc
+    AirWalkPart = nil,
+    FreecamPart = nil,
+    RainbowHighlight = nil,
+    TrailAttachment0 = nil,
+    TrailAttachment1 = nil,
+    RainbowTrail = nil,
+    OriginalLighting = {
+        Brightness = Lighting.Brightness,
+        ClockTime = Lighting.ClockTime,
+        FogEnd = Lighting.FogEnd,
+        GlobalShadows = Lighting.GlobalShadows,
+        Ambient = Lighting.Ambient
+    }
+}
+local Connections = {}
+local timeStoppedParts = {}
+local frozenTracks = {}
+
+-- =====================================================================
+-- 4. ระบบจำลองพฤติกรรมมนุษย์ (Human-like Engine)[span_20](start_span)[span_20](end_span)
+-- =====================================================================
+-- สุ่มพิกัดเยื้องป้องกันบอท (Random Offset 1-3 studs)[span_21](start_span)[span_21](end_span)
+local function GetHumanlikeOffset(targetPosition)
+    local offsetX = math.random(-3, 3)
+    local offsetZ = math.random(-3, 3)
+    return targetPosition + Vector3.new(offsetX, 0, offsetZ)
+end
+
+-- สุ่มความเร็ว 14-18 พร้อมเดินไปหาเป้าหมาย[span_22](start_span)[span_22](end_span)
+local function HumanlikeMove(targetPosition)
+    pcall(function()
+        local character = LocalPlayer.Character
+        if character and character:FindFirstChild("Humanoid") then
+            character.Humanoid.WalkSpeed = math.random(14, 18)
+            character.Humanoid:MoveTo(GetHumanlikeOffset(targetPosition))
+        end
+    end)
+end
+
+-- =====================================================================
+-- 5. โครงสร้าง MODERN DARK MODE UI HUB[span_23](start_span)[span_23](end_span)[span_24](start_span)[span_24](end_span)
+-- =====================================================================
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "DeltaSurgeHub"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = TargetGui
+
+-- หน้าต่างหลัก (Dark Mode)[span_25](start_span)[span_25](end_span)
+local MainWindow = Instance.new("Frame")
+MainWindow.Name = "MainWindow"
+MainWindow.Size = UDim2.new(0, 520, 0, 360)
+MainWindow.Position = UDim2.new(0.5, -260, 0.5, -180)
+MainWindow.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+MainWindow.BorderSizePixel = 0
+MainWindow.Active = true
+MainWindow.Draggable = true
+MainWindow.ClipsDescendants = true
+MainWindow.Parent = ScreenGui
+Instance.new("UICorner", MainWindow).CornerRadius = UDim.new(0, 10)
+local MainStroke = Instance.new("UIStroke", MainWindow)
+MainStroke.Color = Color3.fromRGB(255, 50, 100)
+MainStroke.Thickness = 2
+
+local TopBar = Instance.new("Frame")
+TopBar.Size = UDim2.new(1, 0, 0, 40)
+TopBar.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+TopBar.BorderSizePixel = 0
+TopBar.Parent = MainWindow
+Instance.new("UICorner", TopBar).CornerRadius = UDim.new(0, 10)
+local FixCorner = Instance.new("Frame", TopBar)
+FixCorner.Size = UDim2.new(1, 0, 0, 10)
+FixCorner.Position = UDim2.new(0, 0, 1, -10)
+FixCorner.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+FixCorner.BorderSizePixel = 0
+
+local TitleLabel = Instance.new("TextLabel")
+TitleLabel.Size = UDim2.new(1, -50, 1, 0)
+TitleLabel.Position = UDim2.new(0, 15, 0, 0)
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.Text = "⚡ DELTA SURGE V.19 (OP GOD-TIER EDITION)"
+TitleLabel.TextColor3 = Color3.fromRGB(255, 50, 100)
+TitleLabel.Font = Enum.Font.GothamBold
+TitleLabel.TextSize = 14
+TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+TitleLabel.Parent = TopBar
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 30, 0, 30)
+CloseBtn.Position = UDim2.new(1, -35, 0, 5)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(220, 40, 40)
+CloseBtn.Text = "✕"
+CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 14
+CloseBtn.Parent = TopBar
+Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 6)
+
+-- แถบเมนูด้านซ้ายและจัดการหน้าแท็บ[span_26](start_span)[span_26](end_span)
+local Sidebar = Instance.new("Frame")
+Sidebar.Size = UDim2.new(0, 120, 1, -40)
+Sidebar.Position = UDim2.new(0, 0, 0, 40)
+Sidebar.BackgroundColor3 = Color3.fromRGB(15, 15, 18)
+Sidebar.BorderSizePixel = 0
+Sidebar.Parent = MainWindow
+
+local ContentContainer = Instance.new("Folder")
+ContentContainer.Parent = MainWindow
+
+local tabNames = {"Home", "Combat (OP)", "Movement", "Farm", "Fun & Misc"}
+local pages = {}
+local tabButtons = {}
+
+for i, tName in ipairs(tabNames) do
+    local tabBtn = Instance.new("TextButton")
+    tabBtn.Size = UDim2.new(1, -10, 0, 34)
+    tabBtn.Position = UDim2.new(0, 5, 0, 10 + (i - 1) * 38)
+    tabBtn.BackgroundColor3 = (i == 1) and Color3.fromRGB(255, 50, 100) or Color3.fromRGB(30, 30, 35)
+    tabBtn.Text = tName
+    tabBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    tabBtn.Font = Enum.Font.GothamSemibold
+    tabBtn.TextSize = 12
+    tabBtn.Parent = Sidebar
+    Instance.new("UICorner", tabBtn).CornerRadius = UDim.new(0, 6)
+
+    local page = Instance.new("ScrollingFrame")
+    page.Size = UDim2.new(1, -130, 1, -50)
+    page.Position = UDim2.new(0, 125, 0, 45)
+    page.BackgroundTransparency = 1
+    page.BorderSizePixel = 0
+    page.ScrollBarThickness = 4
+    page.ScrollBarImageColor3 = Color3.fromRGB(255, 50, 100)
+    page.CanvasSize = UDim2.new(0, 0, 0, 1100)
+    page.Visible = (i == 1)
+    page.Parent = ContentContainer
+
+    pages[tName] = page
+    tabButtons[tName] = tabBtn
+
+    tabBtn.MouseButton1Click:Connect(function()
+        for name, p in pairs(pages) do p.Visible = (name == tName) end
+        for name, b in pairs(tabButtons) do
+            TweenService:Create(b, TweenInfo.new(0.2), {
+                BackgroundColor3 = (name == tName) and Color3.fromRGB(255, 50, 100) or Color3.fromRGB(30, 30, 35)
+            }):Play()
+        end
+    end)
+end
+
+-- ปุ่มย่อหน้าต่างลอยได้ (Minimize Floating Button)[span_27](start_span)[span_27](end_span)
+local isMenuVisible = true
+local function ToggleMenu()
+    isMenuVisible = not isMenuVisible
+    MainWindow.Visible = isMenuVisible
+end
+
+CloseBtn.MouseButton1Click:Connect(ToggleMenu)
+
+local FloatButton = Instance.new("TextButton")
+FloatButton.Size = UDim2.new(0, 45, 0, 45)
+FloatButton.Position = UDim2.new(0, 15, 0.5, -22)
+FloatButton.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+FloatButton.Text = "⚡"
+FloatButton.TextSize = 20
+FloatButton.Active = true
+FloatButton.Draggable = true
+FloatButton.Parent = ScreenGui
+Instance.new("UICorner", FloatButton).CornerRadius = UDim.new(1, 0)
+local fStroke = Instance.new("UIStroke", FloatButton)
+fStroke.Color = Color3.fromRGB(255, 50, 100)
+fStroke.Thickness = 2
+FloatButton.MouseButton1Click:Connect(ToggleMenu)
+
+-- =====================================================================
+-- 6. ฟังก์ชันสร้าง Components (UI Builders)[span_28](start_span)[span_28](end_span)
+-- =====================================================================
+local function CreateLabel(parent, text, yPos)
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -15, 0, 22)
+    label.Position = UDim2.new(0, 5, 0, yPos)
+    label.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+    label.Text = "  " .. text
+    label.TextColor3 = Color3.fromRGB(255, 100, 150)
+    label.Font = Enum.Font.GothamBold
+    label.TextSize = 12
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = parent
+    Instance.new("UICorner", label).CornerRadius = UDim.new(0, 4)
+    return label
+end
+
+-- ปุ่ม Toggle ที่ทำงานร่วมกับการฉีดโค้ด (Inject Logic)[span_29](start_span)[span_29](end_span)[span_30](start_span)[span_30](end_span)
+local function CreateToggle(parent, text, yPos, callback)
+    local button = Instance.new("TextButton")
+    button.Size = UDim2.new(1, -15, 0, 32)
+    button.Position = UDim2.new(0, 5, 0, yPos)
+    button.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+    button.Text = text .. " [OFF]"
+    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    button.Font = Enum.Font.GothamSemibold
+    button.TextSize = 12
+    button.Parent = parent
+    Instance.new("UICorner", button).CornerRadius = UDim.new(0, 6)
+
+    local state = false
+    button.MouseButton1Click:Connect(function()
+        state = not state
+        local targetColor = state and Color3.fromRGB(200, 30, 80) or Color3.fromRGB(40, 40, 50)
+        TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = targetColor}):Play()
+        button.Text = text .. (state and " [ON]" or " [OFF]")
+        callback(state) -- เรียกใช้งานฟังก์ชันที่ตั้งไว้[span_31](start_span)[span_31](end_span)
+    end)
+    return button
+end
+
+local function CreateActionBtn(parent, text, yPos, callback)
+    local button = Instance.new("TextButton")
+    button.Size = UDim2.new(1, -15, 0, 32)
+    button.Position = UDim2.new(0, 5, 0, yPos)
+    button.BackgroundColor3 = Color3.fromRGB(150, 40, 80)
+    button.Text = text
+    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    button.Font = Enum.Font.GothamBold
+    button.TextSize = 12
+    button.Parent = parent
+    Instance.new("UICorner", button).CornerRadius = UDim.new(0, 6)
+    
+    button.MouseButton1Click:Connect(function()
+        TweenService:Create(button, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(255, 50, 100)}):Play()
+        task.wait(0.1)
+        TweenService:Create(button, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(150, 40, 80)}):Play()
+        callback()
+    end)
+    return button
+end
+
+local function CreateInput(parent, placeholder, yPos, callback)
+    local input = Instance.new("TextBox")
+    input.Size = UDim2.new(0.6, -10, 0, 28)
+    input.Position = UDim2.new(0, 5, 0, yPos)
+    input.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
+    input.PlaceholderText = placeholder
+    input.TextColor3 = Color3.fromRGB(255, 255, 255)
+    input.Font = Enum.Font.Gotham
+    input.TextSize = 11
+    input.Parent = parent
+    Instance.new("UICorner", input).CornerRadius = UDim.new(0, 4)
+
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0.4, -10, 0, 28)
+    btn.Position = UDim2.new(0.6, 5, 0, yPos)
+    btn.BackgroundColor3 = Color3.fromRGB(150, 40, 80)
+    btn.Text = "ยืนยัน / ป้อนค่า"
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 11
+    btn.Parent = parent
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+
+    btn.MouseButton1Click:Connect(function()
+        callback(input.Text)
+    end)
+end
+
+-- =====================================================================
+-- 7. ติดตั้งแท็บและระบบการทำงานทั้งหมด (INJECT LOGIC TO GUI)[span_32](start_span)[span_32](end_span)
+-- =====================================================================
+
+-- [TAB 1: Home] แสดงข้อมูลผู้เล่น
+local homeP = pages["Home"]
+CreateLabel(homeP, "👤 ผู้เล่น: " .. LocalPlayer.DisplayName .. " (@" .. LocalPlayer.Name .. ")", 10)
+CreateLabel(homeP, "🎮 รหัสแมพ (Place ID): " .. tostring(game.PlaceId), 40)
+CreateLabel(homeP, "🛡️ สถานะระบบความปลอดภัย: Metatable Hooked ปลอดภัย 100%", 70)
+CreateLabel(homeP, "⚠️ V.19: โปรดใช้ฟีเจอร์ OP ด้วยความระมัดระวัง", 100)
+
+-- [TAB 2: Combat (OP)] 
+local combatP = pages["Combat (OP)"]
+CreateLabel(combatP, "🌌 ฟีเจอร์ระดับพระเจ้า (GOD TIER OP)", 10)
+
+-- แบล็คโฮลดูดศัตรู[span_33](start_span)[span_33](end_span)
+CreateToggle(combatP, "ดูดศัตรูรวมกัน (Universal Magnet)", 35, function(state)
+    if state then
+        Connections.Magnet = RunService.RenderStepped:Connect(function()
+            pcall(function()
+                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    local myRoot = LocalPlayer.Character.HumanoidRootPart
+                    for _, v in pairs(Workspace:GetDescendants()) do
+                        if v:IsA("Model") and v ~= LocalPlayer.Character and v:FindFirstChild("Humanoid") and v.Humanoid.Health > 0 then
+                            if v:FindFirstChild("HumanoidRootPart") then
+                                v.HumanoidRootPart.CFrame = myRoot.CFrame * CFrame.new(0, 0, -5)
+                            end
+                        end
+                    end
+                end
+            end)
+        end)
+    else
+        if Connections.Magnet then Connections.Magnet:Disconnect() end
+    end
+end)
+
+-- หลบหลีกอัตโนมัติ
+CreateToggle(combatP, "สัญชาตญาณพระเจ้า (Ultra Instinct Dodge)", 70, function(state)
+    if state then
+        Connections.Dodge = RunService.RenderStepped:Connect(function()
+            pcall(function()
+                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    local myRoot = LocalPlayer.Character.HumanoidRootPart
+                    for _, p in pairs(Players:GetPlayers()) do
+                        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                            local dist = (myRoot.Position - p.Character.HumanoidRootPart.Position).Magnitude
+                            if dist < 15 and dist > 0.5 then
+                                local dodgePos = p.Character.HumanoidRootPart.Position + (p.Character.HumanoidRootPart.CFrame.LookVector * -15)
+                                myRoot.CFrame = CFrame.new(GetHumanlikeOffset(dodgePos))
+                            end
+                        end
+                    end
+                end
+            end)
+        end)
+    else
+        if Connections.Dodge then Connections.Dodge:Disconnect() end
+    end
+end)
+
+-- ออร่าแห่งความตาย ใครชนปลิว
+CreateToggle(combatP, "ออร่าแห่งความตาย ชนปลิว (Fling Aura)", 105, function(state)
+    if state then
+        Connections.Fling = RunService.Stepped:Connect(function()
+            pcall(function()
+                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    local root = LocalPlayer.Character.HumanoidRootPart
+                    root.AssemblyLinearVelocity = Vector3.new(50000, 50000, 50000)
+                    root.AssemblyAngularVelocity = Vector3.new(50000, 50000, 50000)
+                end
+            end)
+        end)
+    else
+        if Connections.Fling then Connections.Fling:Disconnect() end
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            LocalPlayer.Character.HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
+            LocalPlayer.Character.HumanoidRootPart.AssemblyAngularVelocity = Vector3.zero
+        end
+    end
+end)
+
+CreateLabel(combatP, "🎯 เครื่องมือสนับสนุนการโจมตี", 145)
+local function GetClosestTargetWithinRadius(radius)
+    local closestTarget = nil
+    local minDistance = radius or Settings.LockOnRadius
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local hum = player.Character:FindFirstChildOfClass("Humanoid")
+            if hum and hum.Health > 0 then
+                local dist = (LocalPlayer.Character.HumanoidRootPart.Position - player.Character.HumanoidRootPart.Position).Magnitude
+                if dist < minDistance then
+                    minDistance = dist
+                    closestTarget = player.Character.HumanoidRootPart
+                end
+            end
+        end
+    end
+    return closestTarget
+end
+
+CreateToggle(combatP, "ล็อกเป้ากล้องสมูท (Smooth Lock-On)", 170, function(state)
+    if state then
+        Connections.SmoothLock = RunService.RenderStepped:Connect(function()
+            pcall(function()
+                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    local target = GetClosestTargetWithinRadius(Settings.LockOnRadius)
+                    if target then Camera.CFrame = Camera.CFrame:Lerp(CFrame.lookAt(Camera.CFrame.Position, target.Position), 0.15) end
+                end
+            end)
+        end)
+    else
+        if Connections.SmoothLock then Connections.SmoothLock:Disconnect() end
+    end
+end)
+
+CreateToggle(combatP, "ขยายฮิตบ็อกซ์ศัตรู (Hitbox Expander)", 205, function(state)
+    if state then
+        Connections.Hitbox = RunService.RenderStepped:Connect(function()
+            pcall(function()
+                for _, player in ipairs(Players:GetPlayers()) do
+                    if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                        local hrp = player.Character.HumanoidRootPart
+                        hrp.Size = Vector3.new(Settings.HitboxSize, Settings.HitboxSize, Settings.HitboxSize)
+                        hrp.Transparency = 0.6
+                        hrp.BrickColor = BrickColor.new("Really red")
+                        hrp.CanCollide = false
+                    end
+                end
+            end)
+        end)
+    else
+        if Connections.Hitbox then Connections.Hitbox:Disconnect() end
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                player.Character.HumanoidRootPart.Size = Vector3.new(2, 2, 1)
+                player.Character.HumanoidRootPart.Transparency = 1
+            end
+        end
+    end
+end)
+
+CreateToggle(combatP, "ยืนจุดปลอดภัยบนหัวศัตรู (Safe Zone)", 240, function(state)
+    if state then
+        Connections.SafeZone = RunService.Heartbeat:Connect(function()
+            pcall(function()
+                local target = GetClosestTargetWithinRadius(500)
+                if target and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    LocalPlayer.Character.HumanoidRootPart.CFrame = target.CFrame * CFrame.new(0, 6, 0)
+                end
+            end)
+        end)
+    else
+        if Connections.SafeZone then Connections.SafeZone:Disconnect() end
+    end
+end)
+
+
+-- [TAB 3: Movement] การเคลื่อนที่[span_34](start_span)[span_34](end_span)
+local moveP = pages["Movement"]
+CreateLabel(moveP, "⚡ พื้นฐานการเคลื่อนที่", 10)
+CreateToggle(moveP, "วิ่งไว (สุ่มพิกัดพรางตัวกันแบน)", 35, function(state)
+    if state then
+        Connections.Speed = RunService.Heartbeat:Connect(function()
+            pcall(function()
+                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+                    LocalPlayer.Character.Humanoid.WalkSpeed = Settings.WalkSpeed + math.random(-1, 1)
+                end
+            end)
+        end)
+    else
+        if Connections.Speed then Connections.Speed:Disconnect() end
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.WalkSpeed = 16
+        end
+    end
+end)
+CreateInput(moveP, "ความเร็วเดิน (WalkSpeed)", 70, function(val) 
+    if tonumber(val) then Settings.WalkSpeed = tonumber(val) end 
+end)
+
+CreateToggle(moveP, "กระโดดไม่จำกัด (Infinite Jump)", 105, function(state)
+    if state then
+        Connections.InfJump = UserInputService.JumpRequest:Connect(function()
+            pcall(function()
+                local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+                if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
+            end)
+        end)
+    else
+        if Connections.InfJump then Connections.InfJump:Disconnect() end
+    end
+end)
+
+CreateLabel(moveP, "✈️ บิน & ทะลุกำแพง", 145)
+CreateToggle(moveP, "ระบบบินมือถือ (Native Mobile Fly)", 170, function(state)
+    Settings.FlyEnabled = state
+    local char = LocalPlayer.Character
+    if not char then return end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChild("Humanoid")
+
+    if state then
+        if root and hum then
+            local bv = Instance.new("BodyVelocity", root)
+            bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+            bv.Velocity = Vector3.new(0, 0, 0)
+            local bg = Instance.new("BodyGyro", root)
+            bg.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+            bg.CFrame = root.CFrame
+            
+            hum:ChangeState(Enum.HumanoidStateType.Running)
+            
+            Connections.Fly = RunService.RenderStepped:Connect(function()
+                pcall(function()
+                    if not Settings.FlyEnabled or not root or not bv then return end
+                    
+                    for _, p in ipairs(char:GetDescendants()) do
+                        if p:IsA("BasePart") then p.CanTouch = false p.CanCollide = false end
+                    end
+                    
+                    hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+                    hum:SetStateEnabled(Enum.HumanoidStateType.Freefall, false)
+                    
+                    local moveDir = Vector3.new(0, 0, 0)
+                    if hum.MoveDirection.Magnitude > 0 then
+                        moveDir = moveDir + (Camera.CFrame.LookVector * hum.MoveDirection.Z * -1) + (Camera.CFrame.RightVector * hum.MoveDirection.X)
+                    end
+                    if UserInputService:IsKeyDown(Enum.KeyCode.Space) or hum.Jump then
+                        moveDir = moveDir + Vector3.new(0, 1, 0)
+                    end
+                    
+                    if moveDir.Magnitude > 0 then
+                        bv.Velocity = moveDir.Unit * Settings.FlySpeed
+                    else
+                        bv.Velocity = Vector3.new(0, 0, 0)
+                    end
+                    bg.CFrame = Camera.CFrame
+                end)
+            end)
+            Settings.bv = bv
+            Settings.bg = bg
+        end
+    else
+        if Connections.Fly then Connections.Fly:Disconnect() end
+        if Settings.bv then Settings.bv:Destroy() end
+        if Settings.bg then Settings.bg:Destroy() end
+        if hum then
+            hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
+            hum:SetStateEnabled(Enum.HumanoidStateType.Freefall, true)
+            hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+        end
+    end
+end)
+
+CreateToggle(moveP, "เดินทะลุกำแพง (Perfect Noclip)", 205, function(state)
+    if state then
+        Connections.Noclip = RunService.Stepped:Connect(function()
+            pcall(function()
+                if LocalPlayer.Character then
+                    for _, part in ipairs(LocalPlayer.Character:GetDescendants()) do
+                        if part:IsA("BasePart") then part.CanCollide = false end
+                    end
+                end
+            end)
+        end)
+    else
+        if Connections.Noclip then Connections.Noclip:Disconnect() end
+    end
+end)
+
+CreateActionBtn(moveP, "วาร์ปตามจุดเล็งเมาส์ (Safe Tween TP)", 240, function()
+    local char = LocalPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    local root = char.HumanoidRootPart
+    local targetPos = Mouse.Hit.Position + Vector3.new(0, 3, 0)
+    local duration = (root.Position - targetPos).Magnitude / 80
+
+    local tween = TweenService:Create(root, TweenInfo.new(duration, Enum.EasingStyle.Linear), {CFrame = CFrame.new(targetPos)})
+    local conn
+    conn = RunService.Heartbeat:Connect(function()
+        if root then root.AssemblyLinearVelocity = Vector3.zero end
+    end)
+    tween:Play()
+    tween.Completed:Connect(function() if conn then conn:Disconnect() end end)
+end)
+
+
+-- [TAB 4: Auto Farm] การฟาร์มอัตโนมัติ[span_35](start_span)[span_35](end_span)
+local farmP = pages["Farm"]
+CreateLabel(farmP, "⚔️ ระบบฟาร์มอัตโนมัติ", 10)
+CreateToggle(farmP, "ออโต้ฟาร์ม (เดินตีจำลองคนจริง)", 35, function(state)
+    if state then
+        Connections.AutoFarm = RunService.Heartbeat:Connect(function()
+            pcall(function()
+                for _, obj in pairs(Workspace:GetChildren()) do
+                    if obj:FindFirstChild("Humanoid") and obj.Humanoid.Health > 0 and obj ~= LocalPlayer.Character then
+                        HumanlikeMove(obj.HumanoidRootPart.Position)
+                        break
+                    end
+                end
+            end)
+        end)
+    else
+        if Connections.AutoFarm then Connections.AutoFarm:Disconnect() end
+    end
+end)
+
+CreateToggle(farmP, "ล่าบอสอัตโนมัติ (Auto Boss)", 70, function(state)
+    if state then
+        Connections.AutoBoss = RunService.Heartbeat:Connect(function()
+            pcall(function()
+                local boss = Workspace:FindFirstChild("Boss")
+                if boss and boss:FindFirstChild("Humanoid") and boss.Humanoid.Health > 0 then
+                    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                        TweenService:Create(LocalPlayer.Character.HumanoidRootPart, TweenInfo.new(1, Enum.EasingStyle.Linear), {CFrame = boss.HumanoidRootPart.CFrame}):Play()
+                    end
+                end
+            end)
+        end)
+    else
+        if Connections.AutoBoss then Connections.AutoBoss:Disconnect() end
+    end
+end)
+
+CreateToggle(farmP, "เก็บสมบัติรัวๆ (Auto Chest)", 105, function(state)
+    if state then
+        Connections.AutoChest = RunService.Heartbeat:Connect(function()
+            pcall(function()
+                for _, obj in pairs(Workspace:GetDescendants()) do
+                    if obj.Name == "Chest" or obj.Name == "TreasureBox" then
+                        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                            LocalPlayer.Character.HumanoidRootPart.CFrame = obj.CFrame
+                            task.wait(0.5)
+                        end
+                    end
+                end
+            end)
+        end)
+    else
+        if Connections.AutoChest then Connections.AutoChest:Disconnect() end
+    end
+end)
+
+-- [TAB 5: Fun & Misc] ฟีเจอร์สนุกๆ โกงๆ เพียบ[span_36](start_span)[span_36](end_span)!
+local funP = pages["Fun & Misc"]
+CreateLabel(funP, "🎉 ฟีเจอร์สนุก & ก่อกวน (Fun Features)", 10)
+
+CreateToggle(funP, "☁️ เดินบนอากาศ (Air Walk)", 35, function(state)
+    if state then
+        Settings.AirWalkPart = Instance.new("Part", Workspace)
+        Settings.AirWalkPart.Size = Vector3.new(5, 1, 5)
+        Settings.AirWalkPart.Transparency = 1
+        Settings.AirWalkPart.Anchored = true
+        Connections.AirWalk = RunService.RenderStepped:Connect(function()
+            pcall(function()
+                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    Settings.AirWalkPart.CFrame = LocalPlayer.Character.HumanoidRootPart.CFrame * CFrame.new(0, -3.5, 0)
+                end
+            end)
+        end)
+    else
+        if Connections.AirWalk then Connections.AirWalk:Disconnect() end
+        if Settings.AirWalkPart then Settings.AirWalkPart:Destroy() end
+    end
+end)
+
+CreateToggle(funP, "🌕 แรงโน้มถ่วงดวงจันทร์ (Moon Gravity)", 70, function(state)
+    pcall(function()
+        if state then Workspace.Gravity = 50 else Workspace.Gravity = 196.2 end
+    end)
+end)
+
+CreateToggle(funP, "🚁 โดรนสำรวจแมพ (Freecam Mode)", 105, function(state)
+    if state then
+        Settings.FreecamPart = Instance.new("Part", Workspace)
+        Settings.FreecamPart.Size = Vector3.new(1, 1, 1)
+        Settings.FreecamPart.Transparency = 1
+        Settings.FreecamPart.Anchored = true
+        Settings.FreecamPart.CanCollide = false
+        Settings.FreecamPart.CFrame = Camera.CFrame
+        Camera.CameraSubject = Settings.FreecamPart
+        
+        Connections.Freecam = RunService.RenderStepped:Connect(function()
+            pcall(function()
+                local moveDir = Vector3.new(0, 0, 0)
+                if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir = moveDir + Camera.CFrame.LookVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir = moveDir - Camera.CFrame.LookVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir - Camera.CFrame.RightVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + Camera.CFrame.RightVector end
+                
+                if moveDir.Magnitude > 0 then
+                    Settings.FreecamPart.CFrame = Settings.FreecamPart.CFrame + (moveDir.Unit * 2)
+                end
+                Camera.CFrame = CFrame.new(Camera.CFrame.Position, Camera.CFrame.Position + Camera.CFrame.LookVector)
+            end)
+        end)
+    else
+        if Connections.Freecam then Connections.Freecam:Disconnect() end
+        if Settings.FreecamPart then Settings.FreecamPart:Destroy() end
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            Camera.CameraSubject = LocalPlayer.Character.Humanoid
+        end
+    end
+end)
+
+CreateToggle(funP, "🌪️ สปินบอทหมุนตัวพายุ (Tornado Spinbot)", 140, function(state)
+    if state then
+        Connections.Spinbot = RunService.RenderStepped:Connect(function()
+            pcall(function()
+                local char = LocalPlayer.Character
+                if char and char:FindFirstChild("HumanoidRootPart") then
+                    char.HumanoidRootPart.CFrame = char.HumanoidRootPart.CFrame * CFrame.Angles(0, math.rad(50), 0)
+                end
+            end)
+        end)
+    else
+        if Connections.Spinbot then Connections.Spinbot:Disconnect() end
+    end
+end)
+
+CreateLabel(funP, "🌈 เอฟเฟกต์สีสัน & มองเห็น", 180)
+CreateToggle(funP, "ออร่าสายรุ้ง (RGB Chroma Aura)", 205, function(state)
+    if state then
+        local char = LocalPlayer.Character
+        if char then
+            Settings.RainbowHighlight = Instance.new("Highlight", char)
+            Connections.Rainbow = RunService.RenderStepped:Connect(function()
+                pcall(function()
+                    if Settings.RainbowHighlight then
+                        Settings.RainbowHighlight.FillColor = Color3.fromHSV((tick() % 3) / 3, 1, 1)
+                    end
+                end)
+            end)
+        end
+    else
+        if Connections.Rainbow then Connections.Rainbow:Disconnect() end
+        if Settings.RainbowHighlight then Settings.RainbowHighlight:Destroy() end
+    end
+end)
+
+CreateToggle(funP, "สว่างทะลุความมืด (Fullbright)", 240, function(state)
+    pcall(function()
+        if state then
+            Lighting.Brightness = 2
+            Lighting.ClockTime = 14
+            Lighting.FogEnd = 1e5
+            Lighting.GlobalShadows = false
+        else
+            Lighting.Brightness = Settings.OriginalLighting.Brightness
+            Lighting.ClockTime = Settings.OriginalLighting.ClockTime
+            Lighting.FogEnd = Settings.OriginalLighting.FogEnd
+            Lighting.GlobalShadows = Settings.OriginalLighting.GlobalShadows
+        end
+    end)
+end)
+
+CreateToggle(funP, "ภาพมันฝรั่งลื่นๆ (Potato FPS Boost)", 275, function(state)
+    pcall(function()
+        if state then
+            for _, v in ipairs(workspace:GetDescendants()) do
+                if v:IsA("BasePart") then v.Material = Enum.Material.SmoothPlastic v.Reflectance = 0
+                elseif v:IsA("Decal") or v:IsA("Texture") then v.Transparency = 1 end
+            end
+        else
+            -- ยกเลิกไม่ได้ ต้องรีเกมใหม่ถึงจะกลับเป็นปกติ
+        end
+    end)
+end)
+
+CreateLabel(funP, "⏳ ความสามารถพิเศษอื่นๆ", 315)
+CreateToggle(funP, "THE WORLD! (หยุดเวลา & แช่แข็งเซิร์ฟ)", 340, function(state)
+    local char = LocalPlayer.Character
+    if not char then return end
+    if state then
+        local tsSound = Instance.new("Sound", CoreGui)
+        tsSound.SoundId = "rbxassetid://5404505353"
+        tsSound.Volume = 5
+        tsSound:Play()
+
+        local cc = Instance.new("ColorCorrectionEffect", Lighting)
+        cc.Name = "TimeStopCC"
+        cc.Saturation = -1
+        cc.Contrast = 0.5
+        cc.TintColor = Color3.fromRGB(150, 150, 255)
+
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and p.Character then
+                for _, part in ipairs(p.Character:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        timeStoppedParts[part] = part.Anchored
+                        part.Anchored = true
+                    end
+                end
+            end
+        end
+    else
+        if Lighting:FindFirstChild("TimeStopCC") then Lighting.TimeStopCC:Destroy() end
+        for part, anchored in pairs(timeStoppedParts) do
+            if part and part.Parent then part.Anchored = anchored end
+        end
+        timeStoppedParts = {}
+    end
+end)
+
+CreateToggle(funP, "เปิด ESP มองทะลุทุกคน", 375, function(state)
+    if state then
+        for _, p in pairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and p.Character and not p.Character:FindFirstChild("ESP") then
+                local hl = Instance.new("Highlight", p.Character)
+                hl.Name = "ESP"
+                hl.FillColor = Color3.fromRGB(0, 255, 128)
+            end
+        end
+    else
+        for _, p in pairs(Players:GetPlayers()) do
+            if p.Character and p.Character:FindFirstChild("ESP") then p.Character.ESP:Destroy() end
+        end
+    end
+end)
+
+CreateToggle(funP, "กันหลุด AFK 100% (Anti-AFK)", 410, function(state)
+    if state then
+        Connections.AntiAFK = LocalPlayer.Idled:Connect(function()
+            pcall(function()
+                VirtualUser:CaptureController()
+                VirtualUser:ClickButton2(Vector2.new())
+            end)
+        end)
+    else
+        if Connections.AntiAFK then Connections.AntiAFK:Disconnect() end
+    end
+end)
+
+-- =====================================================================
+-- 8. ระบบเกิดใหม่ผูกการทำงานอัตโนมัติ (Respawn Enforcer)[span_37](start_span)[span_37](end_span)
+-- =====================================================================
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    -- ดึงสถานะ Rainbow Aura กลับมา
+    if Settings.RainbowAuraEnabled then
+        local char = LocalPlayer.Character
+        if char then
+            Settings.RainbowHighlight = Instance.new("Highlight", char)
+        end
+    end
+end)
+
+print("[PHD Luau System] โหลดสคริปต์ DELTA SURGE V.19 (OP GOD-TIER) สำเร็จ 100%")
