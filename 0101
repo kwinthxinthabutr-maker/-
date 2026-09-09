@@ -1,0 +1,907 @@
+-- =====================================================================
+-- [NEON MASTER PRODUCTION SUITE - ALL-IN-ONE DELTA EDITION]
+-- พัฒนาด้วยมาตรฐานวิศวกรรมซอฟต์แวร์ระดับปริญญาเอกสำหรับ Mobile Executor
+-- ฟังก์ชัน: หน้าจอโหลด (Loading Screen), ล็อกเป้าหัว/ตัว, เช็คกำแพง (Wall Check),
+-- ดักคนยืนนิ่ง 1 วิ, เส้นลากหาศัตรู (Tracers), ESP เขียวนีออน + ป้ายข้อมูล, หมุน 360
+-- ความปลอดภัย: Metatable Hooking, Human-like Offset, และ Garbage Collection
+-- =====================================================================
+
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local CoreGui = game:GetService("CoreGui")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = Workspace.CurrentCamera
+
+-- คืนหน่วยความจำและทำลาย UI เดิมหากมีการรันสคริปต์ซ้ำ
+local TargetGui = CoreGui:FindFirstChild("RobloxGui") or LocalPlayer:WaitForChild("PlayerGui")
+if TargetGui:FindFirstChild("NeonMaster_Ultimate") then
+    TargetGui.NeonMaster_Ultimate:Destroy()
+end
+if TargetGui:FindFirstChild("NeonLoading_Screen") then
+    TargetGui.NeonLoading_Screen:Destroy()
+end
+
+-- =====================================================================
+-- 1. ระบบความปลอดภัยสูงสุด: METATABLE HOOKING (ANTI-CHEAT BYPASS)
+-- =====================================================================
+local rawMeta = getrawmetatable(game)
+setreadonly(rawMeta, false)
+local originalNamecall = rawMeta.__namecall
+
+rawMeta.__namecall = newcclosure(function(self, ...)
+    local method = getnamecallmethod()
+    if method == "FireServer" and self.ClassName == "RemoteEvent" then
+        local remoteIdentifier = string.lower(self.Name)
+        -- ดักจับและสกัดกั้นสัญญาณเสี่ยงที่ส่งไปเตะ แบน หรือสร้างความเสียหาย
+        if string.find(remoteIdentifier, "die") 
+            or string.find(remoteIdentifier, "kill") 
+            or string.find(remoteIdentifier, "damage") 
+            or string.find(remoteIdentifier, "kick") 
+            or string.find(remoteIdentifier, "ban") 
+            or string.find(remoteIdentifier, "anticheat") 
+            or string.find(remoteIdentifier, "detection") then
+            return nil
+        end
+    end
+    return originalNamecall(self, ...)
+end)
+setreadonly(rawMeta, true)
+
+-- =====================================================================
+-- 2. ระบบจัดการหน่วยความจำและลดอาการแลค (GARBAGE COLLECTION ENGINE)
+-- =====================================================================
+task.spawn(function()
+    while true do
+        task.wait(25) -- กวาดล้างพาร์ทขยะตกแมพทุก 25 วินาที เพื่อคืนพื้นที่ RAM ให้มือถือ
+        pcall(function()
+            for _, dropPart in ipairs(Workspace:GetChildren()) do
+                if dropPart:IsA("BasePart") and not dropPart.Anchored and dropPart.Position.Y < -50 then
+                    dropPart:Destroy()
+                end
+            end
+        end)
+    end
+end)
+
+-- =====================================================================
+-- 3. ศูนย์กลางควบคุมการตั้งค่าและสถานะ (CENTRAL SYSTEM CONFIG)
+-- =====================================================================
+local Config = {
+    -- ระบบล็อกเป้า
+    LockOnEnabled = false,
+    LockMode = "Head",              -- โหมดเล็ง: "Head" (หัว) หรือ "HumanoidRootPart" (ตัว)
+    MaxDistance = 650,              -- ระยะตรวจจับเป้าหมายสูงสุด (Studs)
+    Smoothness = 0.38,              -- ความเร็วการหันกล้อง (เร็วแต่สมูท)
+
+    -- ระบบการมองเห็น
+    NeonGreenESP = false,           -- ร่างไฮไลท์เขียวนีออน
+    ShowTags = true,                -- ป้ายข้อมูลเหนือหัว (ชื่อ, เลือด, ระยะทาง)
+    TracersEnabled = false,         -- เส้นลากโยงจากตัวเราไปยังศัตรู
+    ConversionFactor = 0.28,        -- แปลงระยะ Studs เป็นเมตร
+
+    -- เบ็ดเตล็ด
+    Spin360Enabled = false,         -- หมุนตัว 360 องศา
+    SpinSpeed = 35                  -- ความเร็วการหมุนตัว
+}
+
+local SystemConnections = {}
+local HighlightRegistry = {}
+local TracerRegistry = {}
+local PlayerPositionHistory = {}    -- บันทึกพิกัดตรวจจับคนยืนนิ่ง
+
+-- =====================================================================
+-- 4. สถาปัตยกรรมอัลกอริทึม: ตรวจสอบกำแพง และ ดักคนยืนนิ่งเกิน 1 วินาที
+-- =====================================================================
+
+-- ฟังก์ชันตรวจสอบสิ่งกีดขวาง (Raycast Wall Check)
+local function IsVisibleWithoutWall(targetPart, targetCharacter)
+    local myChar = LocalPlayer.Character
+    if not myChar or not myChar:FindFirstChild("Head") then return false end
+
+    local originPos = Camera.CFrame.Position
+    local targetPos = targetPart.Position
+    local direction = targetPos - originPos
+
+    local rayParams = RaycastParams.new()
+    rayParams.FilterType = Enum.RaycastFilterType.Exclude
+    rayParams.FilterDescendantsInstances = {myChar, targetCharacter, Camera}
+    rayParams.IgnoreWater = true
+
+    local rayResult = Workspace:Raycast(originPos, direction, rayParams)
+    return rayResult == nil
+end
+
+-- เธรดตรวจจับความนิ่งของผู้เล่นทุกคนทุก 0.2 วินาที
+task.spawn(function()
+    while true do
+        task.wait(0.2)
+        local now = tick()
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                local currentPos = player.Character.HumanoidRootPart.Position
+                local record = PlayerPositionHistory[player]
+
+                if not record then
+                    PlayerPositionHistory[player] = {
+                        LastPos = currentPos,
+                        StillStartTime = now,
+                        IsStill = false
+                    }
+                else
+                    local movedDistance = (currentPos - record.LastPos).Magnitude
+                    if movedDistance > 0.3 then
+                        record.LastPos = currentPos
+                        record.StillStartTime = now
+                        record.IsStill = false
+                    else
+                        if now - record.StillStartTime >= 1.0 then
+                            record.IsStill = true
+                        end
+                    end
+                end
+            else
+                PlayerPositionHistory[player] = nil
+            end
+        end
+    end
+end)
+
+-- ฟังก์ชันคัดกรองเป้าหมาย: ศัตรูยืนนิ่งเกิน 1 วิ (Priority 1) > ศัตรูใกล้สุด (Priority 2) และไม่อยู่หลังกำแพง
+local function AcquireOptimalTarget()
+    local myChar = LocalPlayer.Character
+    if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return nil end
+
+    local myPos = myChar.HumanoidRootPart.Position
+    local bestStillTarget = nil
+    local minStillDist = math.huge
+
+    local bestNormalTarget = nil
+    local minNormalDist = math.huge
+
+    for _, otherPlayer in ipairs(Players:GetPlayers()) do
+        if otherPlayer ~= LocalPlayer and otherPlayer.Character then
+            local char = otherPlayer.Character
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            local targetPart = char:FindFirstChild(Config.LockMode)
+
+            if hum and hum.Health > 0 and targetPart then
+                local dist = (targetPart.Position - myPos).Magnitude
+                if dist <= Config.MaxDistance then
+                    if IsVisibleWithoutWall(targetPart, char) then
+                        local record = PlayerPositionHistory[otherPlayer]
+                        local isStationary = record and record.IsStill
+
+                        if isStationary then
+                            if dist < minStillDist then
+                                minStillDist = dist
+                                bestStillTarget = targetPart
+                            end
+                        else
+                            if dist < minNormalDist then
+                                minNormalDist = dist
+                                bestNormalTarget = targetPart
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    return bestStillTarget or bestNormalTarget
+end
+
+-- =====================================================================
+-- 5. สถาปัตยกรรมระบบเส้นโยง (TRACERS FROM PLAYER)
+-- =====================================================================
+local function RemoveTracerForPlayer(player)
+    if TracerRegistry[player] then
+        local data = TracerRegistry[player]
+        if data.Beam then data.Beam:Destroy() end
+        if data.TargetAttachment then data.TargetAttachment:Destroy() end
+        TracerRegistry[player] = nil
+    end
+end
+
+local function AttachTracer(targetPlayer)
+    if targetPlayer == LocalPlayer then return end
+
+    local function Apply(targetChar)
+        if not targetChar then return end
+        local myChar = LocalPlayer.Character
+        if not myChar then return end
+
+        local myRoot = myChar:WaitForChild("HumanoidRootPart", 5)
+        local targetRoot = targetChar:WaitForChild("HumanoidRootPart", 5)
+        if not myRoot or not targetRoot then return end
+
+        local myAttachment = myRoot:FindFirstChild("PlayerOriginAttachment")
+        if not myAttachment then
+            myAttachment = Instance.new("Attachment")
+            myAttachment.Name = "PlayerOriginAttachment"
+            myAttachment.Parent = myRoot
+        end
+
+        RemoveTracerForPlayer(targetPlayer)
+
+        local targetAttachment = Instance.new("Attachment")
+        targetAttachment.Name = "EnemyTracerAttachment"
+        targetAttachment.Parent = targetRoot
+
+        local beam = Instance.new("Beam")
+        beam.Name = "NeonTracerBeam"
+        beam.Attachment0 = myAttachment
+        beam.Attachment1 = targetAttachment
+        beam.Color = ColorSequence.new(Color3.fromRGB(57, 255, 20))
+        beam.Width0 = 0.15
+        beam.Width1 = 0.15
+        beam.Transparency = NumberSequence.new(0.2)
+        beam.FaceCamera = true
+        beam.Segments = 1
+        beam.Parent = targetRoot
+
+        TracerRegistry[targetPlayer] = {
+            Beam = beam,
+            TargetAttachment = targetAttachment
+        }
+    end
+
+    if targetPlayer.Character then
+        Apply(targetPlayer.Character)
+    end
+
+    targetPlayer.CharacterAdded:Connect(function(newChar)
+        task.wait(0.5)
+        if Config.TracersEnabled then
+            Apply(newChar)
+        end
+    end)
+end
+
+local function ClearAllTracers()
+    for player, data in pairs(TracerRegistry) do
+        if data.Beam then data.Beam:Destroy() end
+        if data.TargetAttachment then data.TargetAttachment:Destroy() end
+    end
+    table.clear(TracerRegistry)
+end
+
+-- =====================================================================
+-- 6. สถาปัตยกรรมระบบ ESP เขียวนีออน + ป้ายข้อมูลเหนือหัว (OVERHEAD TAG)
+-- =====================================================================
+local function CreateOverheadTag(character, targetPlayer)
+    local head = character:WaitForChild("Head", 4)
+    if not head then return nil end
+
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "NeonOverheadTag"
+    billboard.Adornee = head
+    billboard.Size = UDim2.new(0, 150, 0, 40)
+    billboard.StudsOffset = Vector3.new(0, 2.3, 0)
+    billboard.AlwaysOnTop = true
+    billboard.Parent = character
+
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1, 0, 1, 0)
+    container.BackgroundColor3 = Color3.fromRGB(15, 18, 22)
+    container.BackgroundTransparency = 0.35
+    container.BorderSizePixel = 0
+    container.Parent = billboard
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 6)
+    corner.Parent = container
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(57, 255, 20)
+    stroke.Thickness = 1
+    stroke.Transparency = 0.3
+    stroke.Parent = container
+
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Size = UDim2.new(1, -6, 0, 16)
+    nameLabel.Position = UDim2.new(0, 3, 0, 2)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Text = targetPlayer.DisplayName
+    nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    nameLabel.Font = Enum.Font.GothamBold
+    nameLabel.TextSize = 11
+    nameLabel.Parent = container
+
+    local infoLabel = Instance.new("TextLabel")
+    infoLabel.Size = UDim2.new(1, -6, 0, 16)
+    infoLabel.Position = UDim2.new(0, 3, 0, 20)
+    infoLabel.BackgroundTransparency = 1
+    infoLabel.Text = "HP: -- | 0m"
+    infoLabel.TextColor3 = Color3.fromRGB(57, 255, 20)
+    infoLabel.Font = Enum.Font.GothamSemibold
+    infoLabel.TextSize = 10
+    infoLabel.Parent = container
+
+    return billboard, infoLabel
+end
+
+local function ApplyNeonGreen(char, targetPlayer)
+    if char and char ~= LocalPlayer.Character and not char:FindFirstChild("NeonGreenHighlight") then
+        local hl = Instance.new("Highlight")
+        hl.Name = "NeonGreenHighlight"
+        hl.FillColor = Color3.fromRGB(57, 255, 20)
+        hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+        hl.FillTransparency = 0.35
+        hl.OutlineTransparency = 0
+        hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        hl.Parent = char
+
+        local tag, infoLabel = CreateOverheadTag(char, targetPlayer)
+
+        HighlightRegistry[char] = {
+            Highlight = hl,
+            Tag = tag,
+            InfoLabel = infoLabel,
+            Humanoid = char:WaitForChild("Humanoid", 4),
+            RootPart = char:WaitForChild("HumanoidRootPart", 4)
+        }
+    end
+end
+
+-- =====================================================================
+-- 7. หน้าจอโหลดข้อมูลเริ่มต้น (DYNAMIC BOOT LOADING SCREEN)
+-- =====================================================================
+local loadingGui = Instance.new("ScreenGui")
+loadingGui.Name = "NeonLoading_Screen"
+loadingGui.ResetOnSpawn = false
+loadingGui.IgnoreGuiInset = true
+loadingGui.Parent = TargetGui
+
+local loadingBg = Instance.new("Frame")
+loadingBg.Size = UDim2.fromScale(1, 1)
+loadingBg.BackgroundColor3 = Color3.fromRGB(12, 14, 22)
+loadingBg.BorderSizePixel = 0
+loadingBg.Parent = loadingGui
+
+local loadTitle = Instance.new("TextLabel")
+loadTitle.Size = UDim2.new(1, 0, 0, 50)
+loadTitle.Position = UDim2.new(0, 0, 0.38, 0)
+loadTitle.BackgroundTransparency = 1
+loadTitle.Text = "✦  NEON MASTER CORE  ✦"
+loadTitle.TextColor3 = Color3.fromRGB(240, 242, 255)
+loadTitle.Font = Enum.Font.GothamBold
+loadTitle.TextSize = 32
+loadTitle.Parent = loadingBg
+
+local subText = Instance.new("TextLabel")
+subText.Size = UDim2.new(1, 0, 0, 25)
+subText.Position = UDim2.new(0, 0, 0.45, 0)
+subText.BackgroundTransparency = 1
+subText.Text = "Initializing Targeting Engine, Tracers & Security Modules..."
+subText.TextColor3 = Color3.fromRGB(150, 156, 180)
+subText.Font = Enum.Font.Gotham
+subText.TextSize = 13
+subText.Parent = loadingBg
+
+local barBG = Instance.new("Frame")
+barBG.Size = UDim2.new(0, 280, 0, 6)
+barBG.Position = UDim2.new(0.5, -140, 0.53, 0)
+barBG.BackgroundColor3 = Color3.fromRGB(27, 31, 46)
+barBG.BorderSizePixel = 0
+barBG.Parent = loadingBg
+
+local barCorner = Instance.new("UICorner")
+barCorner.CornerRadius = UDim.new(0, 6)
+barCorner.Parent = barBG
+
+local barFill = Instance.new("Frame")
+barFill.Size = UDim2.new(0, 0, 1, 0)
+barFill.BackgroundColor3 = Color3.fromRGB(57, 255, 20)
+barFill.BorderSizePixel = 0
+barFill.Parent = barBG
+
+local fillCorner = Instance.new("UICorner")
+fillCorner.CornerRadius = UDim.new(0, 6)
+fillCorner.Parent = barFill
+
+local percentLabel = Instance.new("TextLabel")
+percentLabel.Size = UDim2.new(1, 0, 0, 25)
+percentLabel.Position = UDim2.new(0, 0, 0.57, 0)
+percentLabel.BackgroundTransparency = 1
+percentLabel.Text = "0%"
+percentLabel.TextColor3 = Color3.fromRGB(150, 156, 180)
+percentLabel.Font = Enum.Font.GothamMedium
+percentLabel.TextSize = 13
+percentLabel.Parent = loadingBg
+
+-- =====================================================================
+-- 8. สถาปัตยกรรมหน้าต่างเมนูหลัก (MAIN FRAME & UI COMPONENTS)
+-- =====================================================================
+local gui = Instance.new("ScreenGui")
+gui.Name = "NeonMaster_Ultimate"
+gui.ResetOnSpawn = false
+gui.IgnoreGuiInset = true
+gui.Parent = TargetGui
+
+local main = Instance.new("Frame")
+main.Size = UDim2.new(0, 430, 0, 370)
+main.Position = UDim2.new(0.5, -215, 0.5, -185)
+main.BackgroundColor3 = Color3.fromRGB(20, 23, 35)
+main.BorderSizePixel = 0
+main.Visible = false
+main.Parent = gui
+
+local mainCorner = Instance.new("UICorner")
+mainCorner.CornerRadius = UDim.new(0, 14)
+mainCorner.Parent = main
+
+local mainStroke = Instance.new("UIStroke")
+mainStroke.Color = Color3.fromRGB(65, 70, 100)
+mainStroke.Thickness = 1
+mainStroke.Transparency = 0.25
+mainStroke.Parent = main
+
+-- แถบส่วนหัวด้านบน (Top Bar)
+local top = Instance.new("Frame")
+top.Size = UDim2.new(1, 0, 0, 48)
+top.BackgroundColor3 = Color3.fromRGB(27, 31, 46)
+top.BorderSizePixel = 0
+top.Parent = main
+
+local topCorner = Instance.new("UICorner")
+topCorner.CornerRadius = UDim.new(0, 14)
+topCorner.Parent = top
+
+local topFix = Instance.new("Frame")
+topFix.Size = UDim2.new(1, 0, 0, 15)
+topFix.Position = UDim2.new(0, 0, 1, -15)
+topFix.BackgroundColor3 = Color3.fromRGB(27, 31, 46)
+topFix.BorderSizePixel = 0
+topFix.Parent = top
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -110, 1, 0)
+title.Position = UDim2.new(0, 18, 0, 0)
+title.BackgroundTransparency = 1
+title.Text = "✦  NEON MASTER PRODUCTION  ✦"
+title.TextColor3 = Color3.fromRGB(240, 242, 255)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 14
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Parent = top
+
+local function createTopBtn(symbol, xOffset, bgColor)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 32, 0, 32)
+    btn.Position = UDim2.new(1, xOffset, 0, 8)
+    btn.BackgroundColor3 = bgColor
+    btn.BackgroundTransparency = 0.75
+    btn.Text = symbol
+    btn.TextColor3 = Color3.fromRGB(240, 242, 255)
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 16
+    btn.AutoButtonColor = false
+    btn.Parent = top
+
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0, 8)
+    btnCorner.Parent = btn
+    return btn
+end
+
+local minBtn = createTopBtn("—", -72, Color3.fromRGB(125, 92, 255))
+local closeBtn = createTopBtn("×", -36, Color3.fromRGB(255, 75, 95))
+
+-- พื้นที่แสดงรายการฟังก์ชัน (Scrolling Frame)
+local content = Instance.new("ScrollingFrame")
+content.Size = UDim2.new(1, -24, 1, -62)
+content.Position = UDim2.new(0, 12, 0, 54)
+content.BackgroundTransparency = 1
+content.BorderSizePixel = 0
+content.ScrollBarThickness = 3
+content.ScrollBarImageColor3 = Color3.fromRGB(57, 255, 20)
+content.CanvasSize = UDim2.new(0, 0, 0, 320)
+content.Parent = main
+
+local headerLabel = Instance.new("TextLabel")
+headerLabel.Size = UDim2.new(1, 0, 0, 24)
+headerLabel.BackgroundTransparency = 1
+headerLabel.Text = "Combat, ESP & Targeting Console"
+headerLabel.TextColor3 = Color3.fromRGB(240, 242, 255)
+headerLabel.Font = Enum.Font.GothamBold
+headerLabel.TextSize = 16
+headerLabel.TextXAlignment = Enum.TextXAlignment.Left
+headerLabel.Parent = content
+
+local descLabel = Instance.new("TextLabel")
+descLabel.Size = UDim2.new(1, 0, 0, 18)
+descLabel.Position = UDim2.new(0, 0, 0, 24)
+descLabel.BackgroundTransparency = 1
+descLabel.Text = "ล็อกเป้าเช็คกำแพง • ดักคนยืนนิ่ง 1 วิ • เส้น Tracers • ESP นีออน"
+descLabel.TextColor3 = Color3.fromRGB(150, 156, 180)
+descLabel.Font = Enum.Font.Gotham
+descLabel.TextSize = 12
+descLabel.TextXAlignment = Enum.TextXAlignment.Left
+descLabel.Parent = content
+
+-- ฟังก์ชันสร้างปุ่ม Toggle Switch
+local function createToggleButton(labelText, iconText, yPos, defaultState, callback)
+    local state = defaultState or false
+
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, 0, 0, 44)
+    btn.Position = UDim2.new(0, 0, 0, yPos)
+    btn.BackgroundColor3 = state and Color3.fromRGB(57, 255, 20) or Color3.fromRGB(27, 31, 46)
+    btn.BorderSizePixel = 0
+    btn.Text = ""
+    btn.AutoButtonColor = false
+    btn.Parent = content
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 9)
+    corner.Parent = btn
+
+    local icon = Instance.new("TextLabel")
+    icon.Size = UDim2.new(0, 40, 1, 0)
+    icon.BackgroundTransparency = 1
+    icon.Text = iconText
+    icon.TextColor3 = state and Color3.fromRGB(15, 20, 25) or Color3.fromRGB(0, 220, 255)
+    icon.Font = Enum.Font.GothamBold
+    icon.TextSize = 18
+    icon.Parent = btn
+
+    local text = Instance.new("TextLabel")
+    text.Size = UDim2.new(0.65, -48, 1, 0)
+    text.Position = UDim2.new(0, 48, 0, 0)
+    text.BackgroundTransparency = 1
+    text.Text = labelText
+    text.TextColor3 = state and Color3.fromRGB(15, 20, 25) or Color3.fromRGB(240, 242, 255)
+    text.Font = Enum.Font.GothamBold
+    text.TextSize = 13
+    text.TextXAlignment = Enum.TextXAlignment.Left
+    text.Parent = btn
+
+    local statusLabel = Instance.new("TextLabel")
+    statusLabel.Size = UDim2.new(0.35, -12, 1, 0)
+    statusLabel.Position = UDim2.new(0.65, 0, 0, 0)
+    statusLabel.BackgroundTransparency = 1
+    statusLabel.Text = state and "[ เปิด ]" or "[ ปิด ]"
+    statusLabel.TextColor3 = state and Color3.fromRGB(15, 20, 25) or Color3.fromRGB(150, 156, 180)
+    statusLabel.Font = Enum.Font.GothamBold
+    statusLabel.TextSize = 12
+    statusLabel.TextXAlignment = Enum.TextXAlignment.Right
+    statusLabel.Parent = btn
+
+    btn.MouseButton1Click:Connect(function()
+        state = not state
+        local targetColor = state and Color3.fromRGB(57, 255, 20) or Color3.fromRGB(27, 31, 46)
+        local targetTextCol = state and Color3.fromRGB(15, 20, 25) or Color3.fromRGB(240, 242, 255)
+        local targetStatusCol = state and Color3.fromRGB(15, 20, 25) or Color3.fromRGB(150, 156, 180)
+
+        TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = targetColor}):Play()
+        text.TextColor3 = targetTextCol
+        icon.TextColor3 = state and Color3.fromRGB(15, 20, 25) or Color3.fromRGB(0, 220, 255)
+        statusLabel.TextColor3 = targetStatusCol
+        statusLabel.Text = state and "[ เปิด ]" or "[ ปิด ]"
+
+        callback(state)
+    end)
+    return btn
+end
+
+-- ฟังก์ชันสร้างปุ่ม Action
+local function createActionBtn(labelText, iconText, yPos, callback)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, 0, 0, 42)
+    btn.Position = UDim2.new(0, 0, 0, yPos)
+    btn.BackgroundColor3 = Color3.fromRGB(27, 31, 46)
+    btn.BorderSizePixel = 0
+    btn.Text = ""
+    btn.AutoButtonColor = false
+    btn.Parent = content
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 9)
+    corner.Parent = btn
+
+    local icon = Instance.new("TextLabel")
+    icon.Size = UDim2.new(0, 40, 1, 0)
+    icon.BackgroundTransparency = 1
+    icon.Text = iconText
+    icon.TextColor3 = Color3.fromRGB(0, 220, 255)
+    icon.Font = Enum.Font.GothamBold
+    icon.TextSize = 17
+    icon.Parent = btn
+
+    local text = Instance.new("TextLabel")
+    text.Size = UDim2.new(1, -55, 1, 0)
+    text.Position = UDim2.new(0, 48, 0, 0)
+    text.BackgroundTransparency = 1
+    text.Text = labelText
+    text.TextColor3 = Color3.fromRGB(240, 242, 255)
+    text.Font = Enum.Font.GothamMedium
+    text.TextSize = 13
+    text.TextXAlignment = Enum.TextXAlignment.Left
+    text.Parent = btn
+
+    btn.MouseButton1Click:Connect(function()
+        callback(text)
+    end)
+    return btn
+end
+
+-- =====================================================================
+-- 9. ติดตั้งโมดูลทั้งหมดลงใน UI
+-- =====================================================================
+
+-- [1] ล็อกเป้าเช็คกำแพง + ดักคนยืนนิ่ง 1 วิ (Smart Lock-On)
+createToggleButton("ล็อกเป้า (เช็คกำแพง + นิ่งเกิน 1 วิ)", "🎯", 48, false, function(active)
+    Config.LockOnEnabled = active
+    if active then
+        SystemConnections.LockLoop = RunService.RenderStepped:Connect(function()
+            pcall(function()
+                if not Config.LockOnEnabled then return end
+                local targetPart = AcquireOptimalTarget()
+                if targetPart then
+                    -- สุ่มค่า Micro-Offset ป้องกันการตรวจจับ Heuristic Aimbot
+                    local microOffset = Vector3.new(
+                        math.random(-2, 2) / 100,
+                        math.random(-2, 2) / 100,
+                        math.random(-2, 2) / 100
+                    )
+                    local targetPos = targetPart.Position + microOffset
+                    local targetCFrame = CFrame.lookAt(Camera.CFrame.Position, targetPos)
+
+                    -- เลี้ยวกล้องแบบรวดเร็วแต่สมูท (Smoothness 0.38)
+                    Camera.CFrame = Camera.CFrame:Lerp(targetCFrame, Config.Smoothness)
+                end
+            end)
+        end)
+    else
+        if SystemConnections.LockLoop then
+            SystemConnections.LockLoop:Disconnect()
+            SystemConnections.LockLoop = nil
+        end
+    end
+end)
+
+-- [2] ปุ่มสลับตำแหน่งเล็ง (สลับ หัว / ลำตัว)
+createActionBtn("ตำแหน่งเล็งปัจจุบัน: หัว (Head)", "🔘", 98, function(textLabel)
+    if Config.LockMode == "Head" then
+        Config.LockMode = "HumanoidRootPart"
+        textLabel.Text = "ตำแหน่งเล็งปัจจุบัน: ลำตัว (HumanoidRootPart)"
+    else
+        Config.LockMode = "Head"
+        textLabel.Text = "ตำแหน่งเล็งปัจจุบัน: หัว (Head)"
+    end
+end)
+
+-- [3] ระบบลากเส้นหาศัตรูจากตัวเรา (Player Tracers)
+createToggleButton("ลากเส้นไปหาศัตรูจากตัวเรา (Tracers)", "⚡", 146, false, function(active)
+    Config.TracersEnabled = active
+    if active then
+        for _, p in ipairs(Players:GetPlayers()) do
+            AttachTracer(p)
+        end
+        SystemConnections.TracerAdded = Players.PlayerAdded:Connect(function(newPlayer)
+            AttachTracer(newPlayer)
+        end)
+    else
+        if SystemConnections.TracerAdded then
+            SystemConnections.TracerAdded:Disconnect()
+            SystemConnections.TracerAdded = nil
+        end
+        ClearAllTracers()
+    end
+end)
+
+-- [4] ระบบมองคนเป็นสีเขียวนีออน + ป้ายชื่อเลือดระยะทาง (Neon Green ESP)
+createToggleButton("ESP เขียวนีออน + ป้ายข้อมูล (Always On Top)", "👁️", 196, false, function(active)
+    Config.NeonGreenESP = active
+    if active then
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and p.Character then
+                ApplyNeonGreen(p.Character, p)
+            end
+        end
+
+        SystemConnections.ESPAdded = Players.PlayerAdded:Connect(function(newPlayer)
+            newPlayer.CharacterAdded:Connect(function(newChar)
+                task.wait(0.5)
+                if Config.NeonGreenESP then ApplyNeonGreen(newChar, newPlayer) end
+            end)
+        end)
+
+        -- ลูปอัปเดตเลือดและระยะทางแบบเรียลไทม์
+        SystemConnections.ESPUpdate = RunService.RenderStepped:Connect(function()
+            if not Config.NeonGreenESP then return end
+            local myChar = LocalPlayer.Character
+            local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+
+            for char, data in pairs(HighlightRegistry) do
+                pcall(function()
+                    if data.InfoLabel and data.Humanoid and data.RootPart and data.RootPart.Parent then
+                        local dist = 0
+                        if myRoot then
+                            local studs = (data.RootPart.Position - myRoot.Position).Magnitude
+                            dist = math.floor(studs * Config.ConversionFactor)
+                        end
+                        local hp = math.max(0, math.floor(data.Humanoid.Health))
+                        local maxHp = math.floor(data.Humanoid.MaxHealth)
+                        data.InfoLabel.Text = string.format("HP: %d/%d | %dm", hp, maxHp, dist)
+                    end
+                end)
+            end
+        end)
+    else
+        if SystemConnections.ESPAdded then SystemConnections.ESPAdded:Disconnect() end
+        if SystemConnections.ESPUpdate then SystemConnections.ESPUpdate:Disconnect() end
+        for char, data in pairs(HighlightRegistry) do
+            if data.Highlight and data.Highlight.Parent then data.Highlight:Destroy() end
+            if data.Tag and data.Tag.Parent then data.Tag:Destroy() end
+        end
+        table.clear(HighlightRegistry)
+    end
+end)
+
+-- [5] ระบบหมุนตัว 360 องศา (SpinBot Engine)
+createToggleButton("หมุนตัว 360 องศา (SpinBot)", "🔄", 246, false, function(active)
+    Config.Spin360Enabled = active
+    if active then
+        SystemConnections.SpinLoop = RunService.Heartbeat:Connect(function()
+            pcall(function()
+                if Config.Spin360Enabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    local root = LocalPlayer.Character.HumanoidRootPart
+                    root.CFrame = root.CFrame * CFrame.Angles(0, math.rad(Config.SpinSpeed), 0)
+                end
+            end)
+        end)
+    else
+        if SystemConnections.SpinLoop then
+            SystemConnections.SpinLoop:Disconnect()
+            SystemConnections.SpinLoop = nil
+        end
+    end
+end)
+
+-- =====================================================================
+-- 10. ปุ่มย่อหน้าต่างลอยได้ (FLOATING MINIMIZE BUTTON)
+-- =====================================================================
+local openBtn = Instance.new("TextButton")
+openBtn.Size = UDim2.new(0, 48, 0, 48)
+openBtn.Position = UDim2.new(0, 18, 1, -68)
+openBtn.BackgroundColor3 = Color3.fromRGB(27, 31, 46)
+openBtn.Text = "⚡"
+openBtn.TextColor3 = Color3.fromRGB(57, 255, 20)
+openBtn.Font = Enum.Font.GothamBold
+openBtn.TextSize = 22
+openBtn.Visible = false
+openBtn.Active = true
+openBtn.Draggable = true
+openBtn.Parent = gui
+
+local openCorner = Instance.new("UICorner")
+openCorner.CornerRadius = UDim.new(0, 14)
+openCorner.Parent = openBtn
+
+local openStroke = Instance.new("UIStroke")
+openStroke.Color = Color3.fromRGB(57, 255, 20)
+openStroke.Thickness = 1.2
+openStroke.Transparency = 0.3
+openStroke.Parent = openBtn
+
+-- =====================================================================
+-- 11. แอนิเมชันเปิด/ปิด (BOUNCE ANIMATION SYSTEM)
+-- =====================================================================
+local function showUI()
+    main.Visible = true
+    main.Size = UDim2.new(0, 380, 0, 320)
+    main.Position = UDim2.new(0.5, -190, 0.5, -160)
+
+    TweenService:Create(main, TweenInfo.new(0.45, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        Size = UDim2.new(0, 430, 0, 370),
+        Position = UDim2.new(0.5, -215, 0.5, -185)
+    }):Play()
+    openBtn.Visible = false
+end
+
+local function hideUI()
+    local t = TweenService:Create(main, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
+        Size = UDim2.new(0, 380, 0, 320),
+        Position = UDim2.new(0.5, -190, 0.5, -160)
+    })
+    t:Play()
+    t.Completed:Connect(function()
+        main.Visible = false
+        openBtn.Visible = true
+    end)
+end
+
+local function closeUI()
+    Config.LockOnEnabled = false
+    Config.Spin360Enabled = false
+    main.Visible = false
+    openBtn.Visible = false
+end
+
+minBtn.MouseButton1Click:Connect(hideUI)
+closeBtn.MouseButton1Click:Connect(closeUI)
+openBtn.MouseButton1Click:Connect(showUI)
+
+-- =====================================================================
+-- 12. ระบบลากหน้าต่าง (DRAGGABLE TOP BAR)
+-- =====================================================================
+local dragging = false
+local dragStart
+local startPos
+
+top.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = main.Position
+    end
+end)
+
+top.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = false
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStart
+        main.Position = UDim2.new(
+            startPos.X.Scale,
+            startPos.X.Offset + delta.X,
+            startPos.Y.Scale,
+            startPos.Y.Offset + delta.Y
+        )
+    end
+end)
+
+-- =====================================================================
+-- 13. ลูปแอนิเมชันหน้าจอโหลด (LOADING PROGRESS SEQUENCE)
+-- =====================================================================
+task.spawn(function()
+    for i = 0, 100 do
+        barFill.Size = UDim2.new(i / 100, 0, 1, 0)
+        percentLabel.Text = i .. "%"
+        task.wait(0.015)
+    end
+
+    task.wait(0.2)
+
+    local fadeTween = TweenService:Create(loadingBg, TweenInfo.new(0.35), {
+        BackgroundTransparency = 1
+    })
+    fadeTween:Play()
+
+    task.wait(0.35)
+    loadingGui:Destroy()
+    showUI()
+end)
+
+-- =====================================================================
+-- 14. ระบบผูกมัดตัวละครเกิดใหม่ (RESPAWN SYNC)
+-- =====================================================================
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(0.6)
+    if Config.NeonGreenESP then
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and p.Character then
+                ApplyNeonGreen(p.Character, p)
+            end
+        end
+    end
+    if Config.TracersEnabled then
+        for _, p in ipairs(Players:GetPlayers()) do
+            AttachTracer(p)
+        end
+    end
+end)
+
+print("==========================================================")
+print("⚡ [NEON MASTER SUITE] ติดตั้งระบบครบถ้วนสมบูรณ์ 100%")
+print("==========================================================")
