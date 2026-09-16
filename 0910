@@ -1,0 +1,257 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+   Name = "Ride a Pet Hub | Auto Fly Home",
+   LoadingTitle = "กำลังโหลดระบบ...",
+   LoadingSubtitle = "by Assistant",
+   ConfigurationSaving = { Enabled = false }
+})
+
+local TabMain = Window:CreateTab("ฟังก์ชันหลัก", 4483362458)
+local TabTeleport = Window:CreateTab("ระบบบิน / วาร์ป", 4483362458)
+
+local player = game.Players.LocalPlayer
+local RunService = game:GetService("RunService")
+local ProximityPromptService = game:GetService("ProximityPromptService")
+
+local flySpeed = 350
+local isFlyingHome = false
+local autoFlyOnE = true -- เปิดใช้งานบินกลับบ้านอัตโนมัติเมื่อกด E
+
+-- หาตำแหน่งบ้าน / จุดเกิด
+local function getHomePosition()
+   local spawnLocation = workspace:FindFirstChild("SpawnLocation") or workspace:FindFirstChild("Spawns")
+   if spawnLocation then
+      if spawnLocation:IsA("BasePart") then
+         return spawnLocation.Position + Vector3.new(0, 5, 0)
+      else
+         local firstSpawn = spawnLocation:FindFirstChildWhichIsA("BasePart")
+         if firstSpawn then
+            return firstSpawn.Position + Vector3.new(0, 5, 0)
+         end
+      end
+   end
+   return Vector3.new(0, 15, 0)
+end
+
+-- ฟังก์ชันบินทะลุสิ่งกีดขวางกลับบ้าน (เชือก/ฟิสิกส์ไม่หลุด)
+local function flyBackHome()
+   if isFlyingHome then return end
+   isFlyingHome = true
+
+   local char = player.Character
+   if not char or not char:FindFirstChild("HumanoidRootPart") then 
+      isFlyingHome = false
+      return 
+   end
+
+   local hrp = char.HumanoidRootPart
+   local targetPos = getHomePosition()
+
+   -- ปิดแรงโน้มถ่วงและสร้างแรงขับดัน
+   local bv = Instance.new("BodyVelocity")
+   bv.Velocity = Vector3.zero
+   bv.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+   bv.Parent = hrp
+
+   -- ปิดการชนสิ่งกีดขวาง (Noclip)
+   local noclipConn = RunService.Stepped:Connect(function()
+      pcall(function()
+         for _, p in pairs(char:GetDescendants()) do
+            if p:IsA("BasePart") then
+               p.CanCollide = false
+            end
+         end
+      end)
+   end)
+
+   -- วนลูปบินตรงกลับบ้าน
+   task.spawn(function()
+      while isFlyingHome do
+         local currentPos = hrp.Position
+         local direction = (targetPos - currentPos)
+         local distance = direction.Magnitude
+
+         -- ถึงบ้านแล้ว (ระยะต่ำกว่า 10 Studs)
+         if distance < 10 then
+            break
+         end
+
+         bv.Velocity = direction.Unit * flySpeed
+         task.wait()
+      end
+
+      -- คืนค่าเดิม
+      if bv then bv:Destroy() end
+      if noclipConn then noclipConn:Disconnect() end
+      if hrp then hrp.AssemblyLinearVelocity = Vector3.zero end
+      
+      pcall(function()
+         for _, p in pairs(char:GetDescendants()) do
+            if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" then
+               p.CanCollide = true
+            end
+         end
+      end)
+
+      isFlyingHome = false
+   end)
+end
+
+-- ==================== ตรวจจับการกด E แล้วสั่งบินทันที ====================
+
+ProximityPromptService.PromptTriggered:Connect(function(prompt, triggerPlayer)
+   if triggerPlayer == player and autoFlyOnE then
+      -- รอให้ระบบของเกมผูกสัตว์/ไข่เข้าตัวเสร็จเล็กน้อย (0.1 วินาที) แล้วพุ่งกลับบ้านทันที
+      task.wait(0.15)
+      flyBackHome()
+   end
+end)
+
+-- ==================== แท็บฟังก์ชันหลัก ====================
+
+-- 1. Instant E
+local instantE = true
+local function makeInstant(prompt)
+   if prompt:IsA("ProximityPrompt") then
+      prompt.HoldDuration = 0
+   end
+end
+
+for _, prompt in pairs(workspace:GetDescendants()) do
+   makeInstant(prompt)
+end
+workspace.DescendantAdded:Connect(makeInstant)
+
+TabMain:CreateToggle({
+   Name = "Instant E (กดเก็บทันที ไม่ต้องรอหลอด)",
+   CurrentValue = true,
+   Flag = "InstantEToggle",
+   Callback = function(Value)
+      instantE = Value
+   end,
+})
+
+-- 2. Auto Fly On Collect (เก็บไข่ปุ๊บ บินกลับบ้านปั๊บ)
+TabMain:CreateToggle({
+   Name = "⚡ บินกลับบ้านอัตโนมัติเมื่อกดเก็บไข่",
+   CurrentValue = true,
+   Flag = "AutoFlyToggle",
+   Callback = function(Value)
+      autoFlyOnE = Value
+   end,
+})
+
+-- 3. Auto Click
+local autoClick = false
+TabMain:CreateToggle({
+   Name = "Auto Click / Speed",
+   CurrentValue = false,
+   Flag = "ToggleClick",
+   Callback = function(Value)
+      autoClick = Value
+      task.spawn(function()
+         while autoClick do
+            local replicatedStorage = game:GetService("ReplicatedStorage")
+            pcall(function()
+               for _, v in pairs(replicatedStorage:GetDescendants()) do
+                  if v:IsA("RemoteEvent") and (v.Name:lower():find("click") or v.Name:lower():find("tap")) then
+                     v:FireServer()
+                  end
+               end
+            end)
+            task.wait(0.1)
+         end
+      end)
+   end,
+})
+
+-- 4. WalkSpeed
+TabMain:CreateSlider({
+   Name = "WalkSpeed (ความเร็วเดิน)",
+   Range = {16, 250},
+   Increment = 1,
+   Suffix = " Speed",
+   CurrentValue = 16,
+   Flag = "WalkSpeed",
+   Callback = function(Value)
+      pcall(function()
+         player.Character.Humanoid.WalkSpeed = Value
+      end)
+   end,
+})
+
+-- ==================== แท็บระบบบิน / วาร์ป ====================
+
+TabTeleport:CreateSection("ระบบบินกลับบ้าน")
+
+TabTeleport:CreateButton({
+   Name = "🚀 สั่งบินกลับบ้านตอนนี้เลย",
+   Callback = function()
+      flyBackHome()
+   end,
+})
+
+TabTeleport:CreateButton({
+   Name = "🛑 หยุดบินฉุกเฉิน",
+   Callback = function()
+      isFlyingHome = false
+   end,
+})
+
+TabTeleport:CreateSlider({
+   Name = "Fly Speed (ปรับความเร็วบิน)",
+   Range = {100, 800},
+   Increment = 25,
+   Suffix = " FlySpeed",
+   CurrentValue = 350,
+   Flag = "FlySpeedSlider",
+   Callback = function(Value)
+      flySpeed = Value
+   end,
+})
+
+TabTeleport:CreateSection("วาร์ปไปจุดไข่ (กดตอนตัวเปล่า)")
+
+local function smartTeleportToEgg(keyword)
+   local found = false
+   local targetKeyword = keyword:lower()
+
+   for _, label in pairs(workspace:GetDescendants()) do
+      if label:IsA("TextLabel") and label.Text:lower():find(targetKeyword) then
+         local part = label:FindFirstAncestorWhichIsA("BasePart") or label:FindFirstAncestorWhichIsA("Model")
+         if part then
+            local targetPart = part:IsA("BasePart") and part or (part.PrimaryPart or part:FindFirstChildWhichIsA("BasePart"))
+            if targetPart and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+               player.Character.HumanoidRootPart.CFrame = targetPart.CFrame + Vector3.new(0, 4, 0)
+               found = true
+               break
+            end
+         end
+      end
+   end
+
+   if not found then
+      Rayfield:Notify({
+         Title = "แจ้งเตือน",
+         Content = "ไม่พบตำแหน่งไข่ " .. keyword,
+         Duration = 3,
+         Image = 4483362458,
+      })
+   end
+end
+
+TabTeleport:CreateButton({
+   Name = "🥚 วาร์ปไปไข่ 1.5B",
+   Callback = function() smartTeleportToEgg("1.5B") end,
+})
+
+TabTeleport:CreateButton({
+   Name = "🥚 วาร์ปไปไข่ 100B",
+   Callback = function() smartTeleportToEgg("100B") end,
+})
+
+TabTeleport:CreateButton({
+   Name = "🥚 วาร์ปไปไข่ 1T",
+   Callback = function() smartTeleportToEgg("1T") end,
+})
