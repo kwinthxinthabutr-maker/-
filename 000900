@@ -1,0 +1,1811 @@
+--!strict
+--[[
+    ========================================================================================
+    🎃 DELTA MAP MASTER: MURDER DUELS ([🎃] ดวลฆาตกรรม - Breakfast) MEGA ALL-IN-ONE PRO
+    รองรับ: Delta Executor (Mobile / PC) & Brick Studio
+    PlaceId: 120851538706364 | UniverseId: 9561553764
+    
+    [รายการระบบและฟังก์ชันทั้งหมดในสคริปต์นี้]
+    1. ระบบหน้าต่างอัจฉริยะ (Smart Window Management):
+       - ปุ่มพับเก็บหน้าต่างเหลือแต่หัวข้อ (Collapse / Minimize Bar)
+       - ปุ่มขยาย/ย่อขนาดหน้าต่างกว้างพิเศษ (Expand / Compact Toggle)
+       - ปุ่มลอยบนหน้าจอ (Floating Pill Button) ลากเปลี่ยนตำแหน่งได้
+       - ระบบกันกดปิดพลาด (Anti-Accidental Close Modal): เด้งถาม "ต้องการปิดจริงหรอ?" ก่อนปิดจริง
+    2. แท็บที่ 1 (Dashboard & Live Threat Radar):
+       - เช็คพิกัดสด, ความเร็วเคลื่อนที่, HP, FPS, จำนวนผู้เล่น และชื่อสนามดวลปัจจุบัน
+       - เรดาร์สแกนศัตรูสด (Live Threat Radar) บอกว่าใครถือมีด (Knife) หรือปืน (Revolver) และอยู่ห่างกี่เมตร
+    3. แท็บที่ 2 (Full-Map Navigation & Tactical Teleports):
+       - วาร์ปซ้อนหลังศัตรูที่ใกล้ที่สุด / วาร์ปซ้อนหลังคนถือมีด / วาร์ปซ้อนหลังคนถือปืน
+       - ระบบบินวนรอบตัวศัตรูอัตโนมัติ (Auto Orbit Strafe) ปรับรัศมีและความเร็วได้
+       - ระบบบันทึกพิกัดส่วนตัว (Save / Load Custom Waypoint) และวาร์ปหนีขึ้นที่สูงฉุกเฉิน
+       - รายชื่อจุดวาร์ปครบทั้ง Main Lobby, แท่นโหวตแมพ, แท่นดวล 1v1-4v4 และสนามดวลทุกด่าน
+    4. แท็บที่ 3 (Combat Assist, ESP & Counter-Abilities):
+       - Tactical ESP & X-Ray แยกสีตามอาวุธ (ฟ้า=ปืน, แดง=มีด, เขียว=เพื่อนร่วมทีม) + เส้น Tracer ชี้เป้า
+       - กรองร่างโคลน (Ignore Decoy Clones) ไม่โดนสกิลร่างแยกหลอก
+       - ระบบล็อกเป้ากล้องนุ่มนวล (Soft Camera Aimlock) เลือกเล็งหัวหรือลำตัวได้
+       - ขยาย Hitbox ศัตรู (ปรับขนาด 2-15 Studs, ปรับความโปร่งใส, เลือกชิ้นส่วนได้)
+       - พื้นเซฟตี้กันตกน้ำลดเลือด (Water Hazard Safety Floor)
+       - ลบควันบังตาจากสกิล Smoke Knife อัตโนมัติ + ไฮไลท์กับดักไฟ/มีดระเบิดบนพื้น
+       - ระบบกระโดด/พุ่งถอยหลังอัตโนมัติเมื่อศัตรูถือมีดพุ่งประชิด (Auto-Evade Lunge)
+    5. แท็บที่ 4 (Character, Movement, Camera & World Controls):
+       - WalkSpeed, JumpPower, Infinite Jump (กระโดดไม่จำกัด), Noclip (เดินทะลุกำแพง)
+       - ปรับแรงโน้มถ่วง (Gravity Controller) และระบบหมุนตัวหลบกระสุน (Anti-Hit Spinbot)
+       - ปรับ FOV กล้อง, ปลดล็อกซูมกล้องสูงสุด, Fullbright, ลบหมอก, ปรับเวลาเช้า/มืด
+    6. แท็บที่ 5 (Map Scanner, Player Teleporter, FPS Boost & Server Tools):
+       - วาร์ปไปหาผู้เล่นรายบุคคล (Player Selector), คัดลอกพิกัด CFrame, โหมดลดแลค (FPS Booster)
+       - Anti-AFK, Rejoin Server, Server Hop และปุ่มเรียกหน้าต่างยืนยันปิดสคริปต์
+    ========================================================================================
+]]
+
+-- ============================================================================
+-- [SECTION 1] SERVICES & SAFE ENVIRONMENT HELPERS
+-- ============================================================================
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+local Lighting = game:GetService("Lighting")
+local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
+local VirtualUser = game:GetService("VirtualUser")
+local CoreGui = game:GetService("CoreGui")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = Workspace.CurrentCamera
+
+-- ฟังก์ชันหา Parent ของ GUI ที่ปลอดภัยที่สุด
+local function GetSafeGuiParent(): Instance
+    local ok, res = pcall(function()
+        if gethui then
+            return gethui()
+        elseif CoreGui and CoreGui:FindFirstChild("RobloxGui") then
+            return CoreGui
+        end
+        return LocalPlayer:WaitForChild("PlayerGui", 5)
+    end)
+    if ok and res then
+        return res
+    end
+    return LocalPlayer:WaitForChild("PlayerGui")
+end
+
+-- ฟังก์ชันตรวจสอบตัวละครของผู้เล่นอย่างปลอดภัย ป้องกัน Nil Error 100%
+local function GetSafeCharacter(): (Model?, BasePart?, Humanoid?)
+    local char = LocalPlayer.Character
+    if not char or not char.Parent then
+        return nil, nil, nil
+    end
+    local hrp = char:FindFirstChild("HumanoidRootPart") :: BasePart?
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hrp or not hum or hum.Health <= 0 then
+        return nil, nil, nil
+    end
+    return char, hrp, hum
+end
+
+-- ============================================================================
+-- [SECTION 2] SINGLE-INSTANCE CLEANUP & STATE MANAGER
+-- ============================================================================
+local GLOBAL_KEY = "_DeltaMapMaster_MurderDuels_MegaPro"
+local globalEnv = (getgenv and getgenv()) or _G
+
+if globalEnv[GLOBAL_KEY] and type(globalEnv[GLOBAL_KEY].Cleanup) == "function" then
+    pcall(function()
+        globalEnv[GLOBAL_KEY].Cleanup()
+    end)
+end
+
+local State = {
+    Running = true,
+    IsMinimized = false,
+    IsExpanded = false,
+    Connections = {} :: { RBXScriptConnection },
+    ActiveTween = nil :: Tween?,
+    CreatedInstances = {} :: { Instance },
+    SavedCustomWaypoint = nil :: CFrame?,
+    OrbitAngle = 0,
+
+    ESPObjects = {} :: {
+        [Model]: {
+            Highlight: Highlight?,
+            Billboard: BillboardGui?,
+            Beam: Beam?,
+            Attachment0: Attachment?,
+            Attachment1: Attachment?,
+        }
+    },
+
+    Settings = {
+        -- Navigation & Tactical Movement
+        TweenSpeed = 100,
+        UseInstantTeleport = false,
+        OrbitNearestEnemy = false,
+        OrbitRadius = 9,
+        OrbitSpeed = 4,
+
+        -- Combat, ESP & Counter-Skills
+        ESPEnabled = false,
+        ShowWeaponInHand = true,
+        TracerBeams = false,
+        ProximityThreatAlert = true,
+        ThreatAlertDistance = 18,
+        AutoClearSmoke = false,
+        HighlightArenaTraps = false,
+        WaterHazardFloor = false,
+        AutoEvadeJump = false,
+        AutoEvadeBackstep = false,
+        EvadeTriggerDist = 14,
+
+        -- Hitbox & Soft Aimlock
+        HitboxExpander = false,
+        HitboxSize = 6,
+        HitboxTransparency = 0.65,
+        HitboxTargetPart = "HumanoidRootPart", -- หรือ "Head"
+        SoftCameraAimlock = false,
+        AimlockTargetPart = "Head",
+        AimlockSmoothness = 0.25,
+
+        -- Character, Movement & World
+        CustomWalkSpeed = false,
+        WalkSpeedValue = 24,
+        CustomJumpPower = false,
+        JumpPowerValue = 58,
+        InfiniteJump = false,
+        Noclip = false,
+        CustomGravity = false,
+        GravityValue = 120,
+        Spinbot = false,
+        SpinbotSpeed = 25,
+        CustomFOV = false,
+        FOVValue = 95,
+        UnlockMaxZoom = false,
+        Fullbright = false,
+        NoFog = false,
+        CustomClockTime = false,
+        ClockTimeValue = 14,
+
+        -- Server & System
+        AntiAFK = true,
+    },
+
+    OriginalLighting = {
+        Brightness = Lighting.Brightness,
+        ClockTime = Lighting.ClockTime,
+        FogEnd = Lighting.FogEnd,
+        GlobalShadows = Lighting.GlobalShadows,
+        Ambient = Lighting.Ambient,
+    },
+
+    OriginalGravity = Workspace.Gravity,
+
+    CachedMapInfo = {
+        CurrentArenaName = "กำลังตรวจสอบ...",
+        DetectedWaypoints = {} :: { [string]: CFrame },
+        DynamicFolders = {} :: { string },
+    }
+}
+
+local function TrackConnection(conn: RBXScriptConnection): RBXScriptConnection
+    table.insert(State.Connections, conn)
+    return conn
+end
+
+local function CancelActiveTween()
+    if State.ActiveTween then
+        pcall(function()
+            State.ActiveTween:Cancel()
+        end)
+        State.ActiveTween = nil
+    end
+end
+
+local function CleanupAll()
+    State.Running = false
+    CancelActiveTween()
+
+    for _, conn in ipairs(State.Connections) do
+        pcall(function()
+            conn:Disconnect()
+        end)
+    end
+    table.clear(State.Connections)
+
+    for _, espData in pairs(State.ESPObjects) do
+        pcall(function()
+            if espData.Highlight then espData.Highlight:Destroy() end
+            if espData.Billboard then espData.Billboard:Destroy() end
+            if espData.Beam then espData.Beam:Destroy() end
+            if espData.Attachment0 then espData.Attachment0:Destroy() end
+            if espData.Attachment1 then espData.Attachment1:Destroy() end
+        end)
+    end
+    table.clear(State.ESPObjects)
+
+    -- คืนค่า Hitbox ของผู้เล่นทุกคนให้กลับเป็นปกติ
+    pcall(function()
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character then
+                local hrp = player.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
+                if hrp then
+                    hrp.Size = Vector3.new(2, 2, 1)
+                    hrp.Transparency = 1
+                end
+            end
+        end
+    end)
+
+    -- คืนค่าแรงโน้มถ่วงและแสงเดิม
+    pcall(function()
+        Workspace.Gravity = State.OriginalGravity
+        Lighting.Brightness = State.OriginalLighting.Brightness
+        Lighting.ClockTime = State.OriginalLighting.ClockTime
+        Lighting.FogEnd = State.OriginalLighting.FogEnd
+        Lighting.GlobalShadows = State.OriginalLighting.GlobalShadows
+        Lighting.Ambient = State.OriginalLighting.Ambient
+    end)
+
+    for _, inst in ipairs(State.CreatedInstances) do
+        pcall(function()
+            if inst and inst.Parent then
+                inst:Destroy()
+            end
+        end)
+    end
+    table.clear(State.CreatedInstances)
+end
+
+globalEnv[GLOBAL_KEY] = {
+    Cleanup = CleanupAll
+}
+
+-- ============================================================================
+-- [SECTION 3] FULL MAP DATABASE & DYNAMIC WORKSPACE SCANNER
+-- ============================================================================
+local GameDatabase = {
+    GameTitle = "[🎃] ดวลฆาตกรรม (Murder Duels)",
+    Developer = "Breakfast",
+    KnownArenas = {
+        "Temple", "Corners", "Halloween", "Dock", "Water",
+        "Arena", "Courtyard", "Rooftop", "Factory", "Mansion", "Bridge"
+    },
+    StaticWaypoints = {
+        ["1. Lobby - จุดเกิดหลัก (Main Lobby Spawn)"] = CFrame.new(0, 15, 0),
+        ["2. Lobby - แท่นโหวตแผนที่ (Map Voting Station)"] = CFrame.new(0, 15, -45),
+        ["3. Lobby - แท่นจับคู่ดวล 1v1 / 2v2 (Duel Queue Pads)"] = CFrame.new(45, 15, 0),
+        ["4. Lobby - แท่นจับคู่ดวลทีม 3v3 / 4v4 (Team Queue Pads)"] = CFrame.new(45, 15, 35),
+        ["5. Lobby - โซนสุ่มสกินและกรอกโค้ด (Shop & Codes Station)"] = CFrame.new(-45, 15, 0),
+        ["6. Arena - ใจกลางสนามดวลมาตรฐาน (Arena Center)"] = CFrame.new(0, 25, 250),
+        ["7. Arena - มุมสูงได้เปรียบ (High Ground Sniper Spot)"] = CFrame.new(0, 52, 250),
+        ["8. Arena - โซนลอยฟ้าปลอดภัย (Sky Safe Zone)"] = CFrame.new(0, 88, 250),
+    }
+}
+
+local function ScanMurderDuelsMap()
+    local waypoints: { [string]: CFrame } = {}
+    for k, v in pairs(GameDatabase.StaticWaypoints) do
+        waypoints[k] = v
+    end
+
+    local detectedArena = "Main Lobby (รอรอบดวล)"
+    local folderNames: { string } = {}
+
+    pcall(function()
+        for _, child in ipairs(Workspace:GetChildren()) do
+            if child:IsA("Folder") or child:IsA("Model") then
+                table.insert(folderNames, child.Name .. " [" .. child.ClassName .. "]")
+                local lowerName = string.lower(child.Name)
+
+                if string.find(lowerName, "map") or string.find(lowerName, "arena") or string.find(lowerName, "level") then
+                    local ok, pivotCF = pcall(function() return (child :: Model):GetPivot() end)
+                    if ok and pivotCF then
+                        detectedArena = child.Name
+                        waypoints["Arena สด - ใจกลาง (" .. child.Name .. ")"] = pivotCF + Vector3.new(0, 8, 0)
+                        waypoints["Arena สด - มุมสูง (" .. child.Name .. " High Ground)"] = pivotCF + Vector3.new(0, 36, 0)
+                    end
+
+                    for _, sub in ipairs(child:GetChildren()) do
+                        local subLower = string.lower(sub.Name)
+                        if sub:IsA("BasePart") then
+                            if string.find(subLower, "spawn") or string.find(subLower, "team") or string.find(subLower, "vote") then
+                                waypoints["จุดสำคัญ: " .. sub.Name] = sub.CFrame + Vector3.new(0, 5, 0)
+                            end
+                        elseif sub:IsA("Model") then
+                            for _, keyword in ipairs(GameDatabase.KnownArenas) do
+                                if string.find(subLower, string.lower(keyword)) then
+                                    detectedArena = sub.Name
+                                    local subOk, subCF = pcall(function() return sub:GetPivot() end)
+                                    if subOk and subCF then
+                                        waypoints["ด่านดวล: " .. sub.Name .. " (Center)"] = subCF + Vector3.new(0, 6, 0)
+                                        waypoints["ด่านดวล: " .. sub.Name .. " (High Ground)"] = subCF + Vector3.new(0, 30, 0)
+                                    end
+                                end
+                            end
+                        end
+                    end
+                elseif string.find(lowerName, "lobby") or string.find(lowerName, "vote") or string.find(lowerName, "shop") then
+                    local ok, cf = pcall(function()
+                        if child:IsA("Model") then return child:GetPivot() end
+                        local p = child:FindFirstChildWhichIsA("BasePart", true)
+                        return p and p.CFrame or nil
+                    end)
+                    if ok and cf then
+                        waypoints["Lobby สด - " .. child.Name] = cf + Vector3.new(0, 5, 0)
+                    end
+                end
+            elseif child:IsA("SpawnLocation") then
+                waypoints["จุดเกิด: " .. child.Name] = child.CFrame + Vector3.new(0, 5, 0)
+            end
+        end
+    end)
+
+    State.CachedMapInfo.CurrentArenaName = detectedArena
+    State.CachedMapInfo.DetectedWaypoints = waypoints
+    State.CachedMapInfo.DynamicFolders = folderNames
+end
+
+-- ============================================================================
+-- [SECTION 4] CORE FEATURE MODULES (NAVIGATION, COMBAT, ESP, HAZARDS)
+-- ============================================================================
+
+-- 4.1 ฟังก์ชันเดินทางด้วย Smooth Tween หรือ Instant Teleport
+local function NavigateToCFrame(targetCF: CFrame)
+    local _, hrp, hum = GetSafeCharacter()
+    if not hrp or not hum then return end
+
+    CancelActiveTween()
+
+    pcall(function()
+        LocalPlayer:RequestStreamAroundAsync(targetCF.Position, 3)
+    end)
+
+    if State.Settings.UseInstantTeleport then
+        pcall(function()
+            hrp.CFrame = targetCF
+            hrp.AssemblyLinearVelocity = Vector3.zero
+        end)
+        return
+    end
+
+    local distance = (hrp.Position - targetCF.Position).Magnitude
+    local speed = math.clamp(State.Settings.TweenSpeed, 25, 300)
+    local duration = math.clamp(distance / speed, 0.12, 7.5)
+
+    local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+    local tween = TweenService:Create(hrp, tweenInfo, { CFrame = targetCF })
+    State.ActiveTween = tween
+
+    tween.Completed:Connect(function()
+        if State.ActiveTween == tween then
+            State.ActiveTween = nil
+        end
+    end)
+
+    tween:Play()
+end
+
+-- 4.2 ฟังก์ชันตรวจสอบอาวุธในมือและประเภทยุทธวิธีของศัตรู
+local function GetEquippedWeaponInfo(char: Model): (string, string, Color3)
+    -- เช็ค Tool ที่ถืออยู่ใน Character ก่อน
+    local tool = char:FindFirstChildOfClass("Tool")
+    if tool then
+        local lowerName = string.lower(tool.Name)
+        if string.find(lowerName, "gun") or string.find(lowerName, "revolver") or string.find(lowerName, "pistol") then
+            return "Revolver", "🔫 ปืน (" .. tool.Name .. ")", Color3.fromRGB(65, 175, 255)
+        elseif string.find(lowerName, "knife") or string.find(lowerName, "blade") or string.find(lowerName, "dagger") or string.find(lowerName, "scythe") then
+            return "Knife", "🔪 มีด (" .. tool.Name .. ")", Color3.fromRGB(255, 75, 75)
+        else
+            return "Ability", "⚡ สกิล (" .. tool.Name .. ")", Color3.fromRGB(255, 210, 65)
+        end
+    end
+    return "None", "✋ มือเปล่า", Color3.fromRGB(190, 195, 205)
+end
+
+-- 4.3 ฟังก์ชันค้นหาศัตรูตามเงื่อนไข (ใกล้สุด / ถือมีด / ถือปืน)
+local function FindTargetEnemy(filterWeaponType: string?): (Player?, BasePart?, number)
+    local _, myHrp, _ = GetSafeCharacter()
+    if not myHrp then return nil, nil, math.huge end
+
+    local bestPlayer: Player? = nil
+    local bestHrp: BasePart? = nil
+    local shortestDist = math.huge
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local isTeammate = (LocalPlayer.Team ~= nil and player.Team == LocalPlayer.Team)
+            local eHrp = player.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
+            local eHum = player.Character:FindFirstChildOfClass("Humanoid")
+
+            if eHrp and eHum and eHum.Health > 0 and not isTeammate then
+                local weaponCategory, _, _ = GetEquippedWeaponInfo(player.Character)
+                if not filterWeaponType or weaponCategory == filterWeaponType then
+                    local dist = (myHrp.Position - eHrp.Position).Magnitude
+                    if dist < shortestDist then
+                        shortestDist = dist
+                        bestPlayer = player
+                        bestHrp = eHrp
+                    end
+                end
+            end
+        end
+    end
+
+    return bestPlayer, bestHrp, shortestDist
+end
+
+-- 4.4 ระบบ Tactical ESP, X-Ray & Tracer Beams
+local function UpdatePlayerESP()
+    local _, myHrp, _ = GetSafeCharacter()
+
+    if not State.Settings.ESPEnabled then
+        for _, data in pairs(State.ESPObjects) do
+            pcall(function()
+                if data.Highlight then data.Highlight.Enabled = false end
+                if data.Billboard then data.Billboard.Enabled = false end
+                if data.Beam then data.Beam.Enabled = false end
+            end)
+        end
+        return
+    end
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local char = player.Character
+            local hrp = char:FindFirstChild("HumanoidRootPart") :: BasePart?
+            local hum = char:FindFirstChildOfClass("Humanoid")
+
+            if hrp and hum and hum.Health > 0 then
+                local espEntry = State.ESPObjects[char]
+                if not espEntry then
+                    local hl = Instance.new("Highlight")
+                    hl.Name = "DMM_ProHighlight"
+                    hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                    hl.FillTransparency = 0.55
+                    hl.OutlineTransparency = 0.05
+                    hl.Adornee = char
+                    hl.Parent = char
+
+                    local bb = Instance.new("BillboardGui")
+                    bb.Name = "DMM_ProBillboard"
+                    bb.Size = UDim2.new(0, 195, 0, 50)
+                    bb.StudsOffset = Vector3.new(0, 3.4, 0)
+                    bb.AlwaysOnTop = true
+                    bb.Adornee = hrp
+                    bb.Parent = char
+
+                    local label = Instance.new("TextLabel")
+                    label.Name = "InfoLabel"
+                    label.Size = UDim2.new(1, 0, 1, 0)
+                    label.BackgroundTransparency = 1
+                    label.Font = Enum.Font.GothamBold
+                    label.TextSize = 12
+                    label.TextStrokeTransparency = 0.15
+                    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+                    label.Parent = bb
+
+                    local att1 = Instance.new("Attachment")
+                    att1.Name = "DMM_TargetAtt"
+                    att1.Parent = hrp
+
+                    local beam = Instance.new("Beam")
+                    beam.Name = "DMM_TracerBeam"
+                    beam.FaceCamera = true
+                    beam.Width0 = 0.12
+                    beam.Width1 = 0.12
+                    beam.Transparency = NumberSequence.new(0.25)
+                    beam.Attachment1 = att1
+                    beam.Enabled = false
+                    beam.Parent = hrp
+
+                    espEntry = {
+                        Highlight = hl,
+                        Billboard = bb,
+                        Beam = beam,
+                        Attachment0 = nil,
+                        Attachment1 = att1,
+                    }
+                    State.ESPObjects[char] = espEntry
+                    table.insert(State.CreatedInstances, hl)
+                    table.insert(State.CreatedInstances, bb)
+                    table.insert(State.CreatedInstances, att1)
+                    table.insert(State.CreatedInstances, beam)
+                end
+
+                local _, weaponLabel, weaponColor = GetEquippedWeaponInfo(char)
+                local dist = myHrp and math.floor((myHrp.Position - hrp.Position).Magnitude) or 0
+                local hp = math.floor(hum.Health)
+                local isTeammate = (LocalPlayer.Team ~= nil and player.Team == LocalPlayer.Team)
+                local finalColor = isTeammate and Color3.fromRGB(75, 255, 130) or weaponColor
+
+                if espEntry.Highlight then
+                    espEntry.Highlight.Enabled = true
+                    espEntry.Highlight.FillColor = finalColor
+                    espEntry.Highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+                end
+
+                if espEntry.Billboard then
+                    espEntry.Billboard.Enabled = true
+                    local lbl = espEntry.Billboard:FindFirstChild("InfoLabel") :: TextLabel?
+                    if lbl then
+                        lbl.TextColor3 = finalColor
+                        if State.Settings.ShowWeaponInHand then
+                            lbl.Text = string.format("%s [%d HP | %dm]\n%s", player.DisplayName, hp, dist, weaponLabel)
+                        else
+                            lbl.Text = string.format("%s [%d HP | %dm]", player.DisplayName, hp, dist)
+                        end
+                    end
+                end
+
+                if espEntry.Beam then
+                    if State.Settings.TracerBeams and myHrp and not isTeammate then
+                        local myAtt = myHrp:FindFirstChild("DMM_MyOriginAtt") :: Attachment?
+                        if not myAtt then
+                            myAtt = Instance.new("Attachment")
+                            myAtt.Name = "DMM_MyOriginAtt"
+                            myAtt.Parent = myHrp
+                            table.insert(State.CreatedInstances, myAtt)
+                        end
+                        espEntry.Beam.Attachment0 = myAtt
+                        espEntry.Beam.Color = ColorSequence.new(finalColor)
+                        espEntry.Beam.Enabled = true
+                    else
+                        espEntry.Beam.Enabled = false
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- 4.5 ระบบสร้างพื้นเซฟตี้ป้องกันตกบ่อน้ำ (Water Hazard Safety Floor)
+local SafetyPlatformPart: Part? = nil
+local function UpdateWaterHazardPlatform()
+    if not State.Settings.WaterHazardFloor then
+        if SafetyPlatformPart then
+            SafetyPlatformPart.CanCollide = false
+            SafetyPlatformPart.Transparency = 1
+        end
+        return
+    end
+
+    local _, hrp, _ = GetSafeCharacter()
+    if not hrp then return end
+
+    if not SafetyPlatformPart or not SafetyPlatformPart.Parent then
+        local part = Instance.new("Part")
+        part.Name = "DMM_WaterHazardSafetyFloor"
+        part.Size = Vector3.new(32, 1.2, 32)
+        part.Anchored = true
+        part.CanCollide = true
+        part.Material = Enum.Material.Neon
+        part.Color = Color3.fromRGB(0, 215, 255)
+        part.Transparency = 0.6
+        part.Parent = Workspace
+        SafetyPlatformPart = part
+        table.insert(State.CreatedInstances, part)
+    end
+
+    if hrp.Position.Y < 6.5 then
+        SafetyPlatformPart.CanCollide = true
+        SafetyPlatformPart.Transparency = 0.45
+        SafetyPlatformPart.CFrame = CFrame.new(hrp.Position.X, 2.5, hrp.Position.Z)
+    else
+        SafetyPlatformPart.CanCollide = false
+        SafetyPlatformPart.Transparency = 0.88
+        SafetyPlatformPart.CFrame = CFrame.new(hrp.Position.X, -60, hrp.Position.Z)
+    end
+end
+
+-- 4.6 ระบบแก้ทางสกิล (Smoke Cleaner, Trap Highlighter, Hitbox, Auto-Evade)
+local function RunTacticalMaintenance()
+    local _, myHrp, myHum = GetSafeCharacter()
+
+    -- ลบควันจากสกิล Smoke Knife และไฮไลท์กับดัก Molotov / Portal
+    if State.Settings.AutoClearSmoke or State.Settings.HighlightArenaTraps then
+        pcall(function()
+            for _, obj in ipairs(Workspace:GetChildren()) do
+                local lower = string.lower(obj.Name)
+                if State.Settings.AutoClearSmoke and (string.find(lower, "smoke") or string.find(lower, "cloud") or string.find(lower, "fog")) then
+                    for _, desc in ipairs(obj:GetDescendants()) do
+                        if desc:IsA("ParticleEmitter") or desc:IsA("Smoke") then
+                            desc.Enabled = false
+                        elseif desc:IsA("BasePart") then
+                            desc.Transparency = 1
+                            desc.CanCollide = false
+                        end
+                    end
+                end
+
+                if State.Settings.HighlightArenaTraps and (string.find(lower, "molotov") or string.find(lower, "fire") or string.find(lower, "portal") or string.find(lower, "bomb")) then
+                    if not obj:FindFirstChild("DMM_TrapHL") then
+                        local hl = Instance.new("Highlight")
+                        hl.Name = "DMM_TrapHL"
+                        hl.FillColor = Color3.fromRGB(255, 120, 0)
+                        hl.OutlineColor = Color3.fromRGB(255, 255, 0)
+                        hl.Parent = obj
+                        table.insert(State.CreatedInstances, hl)
+                    end
+                end
+            end
+        end)
+    end
+
+    -- ขยาย Hitbox ศัตรู และเช็คระยะหลบอัตโนมัติ
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local isTeammate = (LocalPlayer.Team ~= nil and player.Team == LocalPlayer.Team)
+            local enemyHrp = player.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
+            local enemyHead = player.Character:FindFirstChild("Head") :: BasePart?
+            local enemyHum = player.Character:FindFirstChildOfClass("Humanoid")
+
+            if enemyHrp and enemyHum and enemyHum.Health > 0 and not isTeammate then
+                if State.Settings.HitboxExpander then
+                    local sz = math.clamp(State.Settings.HitboxSize, 2, 15)
+                    local targetPart = (State.Settings.HitboxTargetPart == "Head" and enemyHead) or enemyHrp
+                    if targetPart then
+                        targetPart.Size = Vector3.new(sz, sz, sz)
+                        targetPart.Transparency = State.Settings.HitboxTransparency
+                        targetPart.Color = Color3.fromRGB(255, 70, 70)
+                        targetPart.CanCollide = false
+                    end
+                else
+                    enemyHrp.Size = Vector3.new(2, 2, 1)
+                    enemyHrp.Transparency = 1
+                end
+
+                if myHrp and myHum then
+                    local dist = (myHrp.Position - enemyHrp.Position).Magnitude
+                    if dist <= State.Settings.EvadeTriggerDist then
+                        if State.Settings.AutoEvadeJump and myHum.FloorMaterial ~= Enum.Material.Air then
+                            myHum.Jump = true
+                        end
+                        if State.Settings.AutoEvadeBackstep then
+                            local awayDir = (myHrp.Position - enemyHrp.Position).Unit
+                            myHrp.CFrame = myHrp.CFrame + (awayDir * 4.5)
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- 4.7 ระบบตั้งค่าตัวละคร กล้อง และสภาพแวดล้อม
+local function ApplyCharacterAndEnvironmentSettings()
+    local _, _, hum = GetSafeCharacter()
+    if hum then
+        if State.Settings.CustomWalkSpeed then
+            hum.WalkSpeed = State.Settings.WalkSpeedValue
+        end
+        if State.Settings.CustomJumpPower then
+            hum.UseJumpPower = true
+            hum.JumpPower = State.Settings.JumpPowerValue
+        end
+    end
+
+    if State.Settings.CustomGravity then
+        Workspace.Gravity = State.Settings.GravityValue
+    else
+        Workspace.Gravity = State.OriginalGravity
+    end
+
+    if Camera and State.Settings.CustomFOV then
+        Camera.FieldOfView = State.Settings.FOVValue
+    end
+
+    if State.Settings.UnlockMaxZoom then
+        LocalPlayer.CameraMaxZoomDistance = 500
+    end
+
+    if State.Settings.Fullbright then
+        Lighting.Brightness = 2.6
+        Lighting.GlobalShadows = false
+        Lighting.Ambient = Color3.fromRGB(190, 190, 190)
+    end
+
+    if State.Settings.NoFog then
+        Lighting.FogEnd = 100000
+    end
+
+    if State.Settings.CustomClockTime then
+        Lighting.ClockTime = State.Settings.ClockTimeValue
+    end
+end
+
+-- ระบบกระโดดกลางอากาศไม่จำกัด (Infinite Jump)
+TrackConnection(UserInputService.JumpRequest:Connect(function()
+    if State.Settings.InfiniteJump then
+        local _, _, hum = GetSafeCharacter()
+        if hum then
+            hum:ChangeState(Enum.HumanoidStateType.Jumping)
+        end
+    end
+end))
+
+-- ระบบ Noclip, Spinbot, Orbit Strafe และ Soft Camera Aimlock (ทำงานบน RenderStepped/Stepped อย่างลื่นไหล)
+TrackConnection(RunService.Stepped:Connect(function()
+    if not State.Running then return end
+    if State.Settings.Noclip then
+        local char = LocalPlayer.Character
+        if char then
+            for _, part in ipairs(char:GetDescendants()) do
+                if part:IsA("BasePart") and part.CanCollide then
+                    part.CanCollide = false
+                end
+            end
+        end
+    end
+end))
+
+TrackConnection(RunService.RenderStepped:Connect(function(dt)
+    if not State.Running then return end
+    local _, myHrp, _ = GetSafeCharacter()
+    if not myHrp then return end
+
+    -- ระบบ Spinbot หมุนตัวหลบกระสุน
+    if State.Settings.Spinbot then
+        myHrp.CFrame = myHrp.CFrame * CFrame.Angles(0, math.rad(State.Settings.SpinbotSpeed), 0)
+    end
+
+    -- ระบบ Orbit วนรอบศัตรูที่ใกล้ที่สุด
+    if State.Settings.OrbitNearestEnemy then
+        local _, enemyHrp, dist = FindTargetEnemy(nil)
+        if enemyHrp and dist < 85 then
+            State.OrbitAngle = State.OrbitAngle + (dt * State.Settings.OrbitSpeed)
+            local offsetX = math.cos(State.OrbitAngle) * State.Settings.OrbitRadius
+            local offsetZ = math.sin(State.OrbitAngle) * State.Settings.OrbitRadius
+            local targetPos = enemyHrp.Position + Vector3.new(offsetX, 1.5, offsetZ)
+            myHrp.CFrame = CFrame.new(targetPos, enemyHrp.Position)
+        end
+    end
+
+    -- ระบบ Soft Camera Aimlock ช่วยหันกล้องหาศัตรู
+    if State.Settings.SoftCameraAimlock and Camera then
+        local targetPlayer, enemyHrp, dist = FindTargetEnemy(nil)
+        if targetPlayer and targetPlayer.Character and enemyHrp and dist < 150 then
+            local aimPart = targetPlayer.Character:FindFirstChild(State.Settings.AimlockTargetPart) :: BasePart? or enemyHrp
+            local goalCF = CFrame.new(Camera.CFrame.Position, aimPart.Position)
+            Camera.CFrame = Camera.CFrame:Lerp(goalCF, math.clamp(State.Settings.AimlockSmoothness, 0.05, 1.0))
+        end
+    end
+end))
+
+TrackConnection(LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(0.6)
+    if State.Running then
+        ApplyCharacterAndEnvironmentSettings()
+    end
+end))
+
+TrackConnection(LocalPlayer.Idled:Connect(function()
+    if State.Settings.AntiAFK then
+        pcall(function()
+            VirtualUser:CaptureController()
+            VirtualUser:ClickButton2(Vector2.zero)
+        end)
+    end
+end))
+
+-- ============================================================================
+-- [SECTION 5] UI CONSTRUCTION WITH MINIMIZE/EXPAND & ANTI-CLOSE MODAL
+-- ============================================================================
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "DeltaMapMaster_MurderDuels_MegaPro"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.Parent = GetSafeGuiParent()
+table.insert(State.CreatedInstances, ScreenGui)
+
+-- แบนเนอร์แจ้งเตือนภัยคุกคามระยะประชิด (Proximity Threat Warning Banner)
+local ThreatBanner = Instance.new("TextLabel")
+ThreatBanner.Name = "ThreatBanner"
+ThreatBanner.Size = UDim2.new(0, 360, 0, 34)
+ThreatBanner.Position = UDim2.new(0.5, -180, 0, 14)
+ThreatBanner.BackgroundColor3 = Color3.fromRGB(165, 25, 35)
+ThreatBanner.BackgroundTransparency = 0.15
+ThreatBanner.TextColor3 = Color3.fromRGB(255, 255, 255)
+ThreatBanner.Font = Enum.Font.GothamBold
+ThreatBanner.TextSize = 13
+ThreatBanner.Text = "⚠️ ระวัง! ศัตรูอยู่ในระยะประชิด!"
+ThreatBanner.Visible = false
+ThreatBanner.Parent = ScreenGui
+
+local BannerCorner = Instance.new("UICorner")
+BannerCorner.CornerRadius = UDim.new(0, 8)
+BannerCorner.Parent = ThreatBanner
+
+local BannerStroke = Instance.new("UIStroke")
+BannerStroke.Color = Color3.fromRGB(255, 190, 60)
+BannerStroke.Thickness = 1.5
+BannerStroke.Parent = ThreatBanner
+
+-- ปุ่มลอยสำหรับเปิด/ซ่อนหน้าต่างหลัก (Floating Pill Button ลากได้)
+local FloatingBtn = Instance.new("TextButton")
+FloatingBtn.Name = "FloatingToggle"
+FloatingBtn.Size = UDim2.new(0, 138, 0, 38)
+FloatingBtn.Position = UDim2.new(0, 16, 0.5, -190)
+FloatingBtn.BackgroundColor3 = Color3.fromRGB(26, 22, 36)
+FloatingBtn.TextColor3 = Color3.fromRGB(255, 165, 55)
+FloatingBtn.Font = Enum.Font.GothamBold
+FloatingBtn.TextSize = 13
+FloatingBtn.Text = "🎃 MD Pro [ซ่อน/เปิด]"
+FloatingBtn.Parent = ScreenGui
+
+local FloatCorner = Instance.new("UICorner")
+FloatCorner.CornerRadius = UDim.new(0, 10)
+FloatCorner.Parent = FloatingBtn
+
+local FloatStroke = Instance.new("UIStroke")
+FloatStroke.Color = Color3.fromRGB(255, 135, 40)
+FloatStroke.Thickness = 1.6
+FloatStroke.Parent = FloatingBtn
+
+-- หน้าต่างหลักของ Hub (MainFrame)
+local NORMAL_SIZE = UDim2.new(0, 620, 0, 410)
+local EXPANDED_SIZE = UDim2.new(0, 740, 0, 490)
+local COLLAPSED_HEIGHT = 44
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = NORMAL_SIZE
+MainFrame.Position = UDim2.new(0.5, -310, 0.5, -205)
+MainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 25)
+MainFrame.BorderSizePixel = 0
+MainFrame.ClipsDescendants = true
+MainFrame.Parent = ScreenGui
+
+local MainCorner = Instance.new("UICorner")
+MainCorner.CornerRadius = UDim.new(0, 10)
+MainCorner.Parent = MainFrame
+
+local MainStroke = Instance.new("UIStroke")
+MainStroke.Color = Color3.fromRGB(255, 130, 35)
+MainStroke.Thickness = 1.8
+MainStroke.Parent = MainFrame
+
+-- แถบด้านบน (TopBar พร้อมปุ่ม 1.พับเก็บ 2.ขยายขนาด 3.ปุ่มปิดแบบถามยืนยัน)
+local TopBar = Instance.new("Frame")
+TopBar.Name = "TopBar"
+TopBar.Size = UDim2.new(1, 0, 0, COLLAPSED_HEIGHT)
+TopBar.BackgroundColor3 = Color3.fromRGB(28, 25, 38)
+TopBar.BorderSizePixel = 0
+TopBar.Parent = MainFrame
+
+local TopCorner = Instance.new("UICorner")
+TopCorner.CornerRadius = UDim.new(0, 10)
+TopCorner.Parent = TopBar
+
+local TitleLabel = Instance.new("TextLabel")
+TitleLabel.Size = UDim2.new(1, -145, 1, 0)
+TitleLabel.Position = UDim2.new(0, 14, 0, 0)
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.Font = Enum.Font.GothamBold
+TitleLabel.TextSize = 14
+TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+TitleLabel.TextColor3 = Color3.fromRGB(255, 170, 60)
+TitleLabel.Text = "🎃 Delta Map Master PRO | [🎃] ดวลฆาตกรรม (Murder Duels)"
+TitleLabel.Parent = TopBar
+
+-- 1. ปุ่มพับย่อ/กางหน้าต่าง (Collapse / Minimize Button)
+local CollapseBtn = Instance.new("TextButton")
+CollapseBtn.Name = "CollapseBtn"
+CollapseBtn.Size = UDim2.new(0, 34, 0, 28)
+CollapseBtn.Position = UDim2.new(1, -118, 0, 8)
+CollapseBtn.BackgroundColor3 = Color3.fromRGB(48, 45, 66)
+CollapseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CollapseBtn.Font = Enum.Font.GothamBold
+CollapseBtn.TextSize = 14
+CollapseBtn.Text = "—"
+CollapseBtn.Parent = TopBar
+
+local CollapseCorner = Instance.new("UICorner")
+CollapseCorner.CornerRadius = UDim.new(0, 6)
+CollapseCorner.Parent = CollapseBtn
+
+-- 2. ปุ่มขยาย/ย่อขนาดความกว้างหน้าต่าง (Expand / Resize Button)
+local ResizeBtn = Instance.new("TextButton")
+ResizeBtn.Name = "ResizeBtn"
+ResizeBtn.Size = UDim2.new(0, 34, 0, 28)
+ResizeBtn.Position = UDim2.new(1, -78, 0, 8)
+ResizeBtn.BackgroundColor3 = Color3.fromRGB(45, 72, 105)
+ResizeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ResizeBtn.Font = Enum.Font.GothamBold
+ResizeBtn.TextSize = 13
+ResizeBtn.Text = "⛶"
+ResizeBtn.Parent = TopBar
+
+local ResizeCorner = Instance.new("UICorner")
+ResizeCorner.CornerRadius = UDim.new(0, 6)
+ResizeCorner.Parent = ResizeBtn
+
+-- 3. ปุ่มปิดสคริปต์ที่มีระบบกันกดผิด (Close Button -> Opens Confirmation Modal)
+local CloseRequestBtn = Instance.new("TextButton")
+CloseRequestBtn.Name = "CloseRequestBtn"
+CloseRequestBtn.Size = UDim2.new(0, 34, 0, 28)
+CloseRequestBtn.Position = UDim2.new(1, -38, 0, 8)
+CloseRequestBtn.BackgroundColor3 = Color3.fromRGB(175, 42, 48)
+CloseRequestBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseRequestBtn.Font = Enum.Font.GothamBold
+CloseRequestBtn.TextSize = 14
+CloseRequestBtn.Text = "✕"
+CloseRequestBtn.Parent = TopBar
+
+local CloseCorner = Instance.new("UICorner")
+CloseCorner.CornerRadius = UDim.new(0, 6)
+CloseCorner.Parent = CloseRequestBtn
+
+-- ============================================================================
+-- [CONFIRMATION MODAL] หน้าต่างป๊อปอัปถามว่า "ต้องการปิดจริงหรอ?" (กันกดปิดพลาด)
+-- ============================================================================
+local ConfirmOverlay = Instance.new("Frame")
+ConfirmOverlay.Name = "ConfirmCloseOverlay"
+ConfirmOverlay.Size = UDim2.new(1, 0, 1, 0)
+ConfirmOverlay.BackgroundColor3 = Color3.fromRGB(8, 8, 12)
+ConfirmOverlay.BackgroundTransparency = 0.35
+ConfirmOverlay.Visible = false
+ConfirmOverlay.ZIndex = 50
+ConfirmOverlay.Parent = MainFrame
+
+local ConfirmModal = Instance.new("Frame")
+ConfirmModal.Name = "ConfirmModal"
+ConfirmModal.Size = UDim2.new(0, 340, 0, 175)
+ConfirmModal.Position = UDim2.new(0.5, -170, 0.5, -87)
+ConfirmModal.BackgroundColor3 = Color3.fromRGB(26, 24, 36)
+ConfirmModal.BorderSizePixel = 0
+ConfirmModal.ZIndex = 51
+ConfirmModal.Parent = ConfirmOverlay
+
+local ModalCorner = Instance.new("UICorner")
+ModalCorner.CornerRadius = UDim.new(0, 12)
+ModalCorner.Parent = ConfirmModal
+
+local ModalStroke = Instance.new("UIStroke")
+ModalStroke.Color = Color3.fromRGB(255, 95, 95)
+ModalStroke.Thickness = 2
+ModalStroke.Parent = ConfirmModal
+
+local ModalTitle = Instance.new("TextLabel")
+ModalTitle.Size = UDim2.new(1, -24, 0, 36)
+ModalTitle.Position = UDim2.new(0, 12, 0, 14)
+ModalTitle.BackgroundTransparency = 1
+ModalTitle.Font = Enum.Font.GothamBold
+ModalTitle.TextSize = 17
+ModalTitle.TextColor3 = Color3.fromRGB(255, 110, 110)
+ModalTitle.Text = "⚠️ ต้องการปิดจริงหรอ?"
+ModalTitle.ZIndex = 52
+ModalTitle.Parent = ConfirmModal
+
+local ModalDesc = Instance.new("TextLabel")
+ModalDesc.Size = UDim2.new(1, -28, 0, 48)
+ModalDesc.Position = UDim2.new(0, 14, 0, 52)
+ModalDesc.BackgroundTransparency = 1
+ModalDesc.Font = Enum.Font.Gotham
+ModalDesc.TextSize = 13
+ModalDesc.TextWrapped = true
+ModalDesc.TextColor3 = Color3.fromRGB(225, 225, 235)
+ModalDesc.Text = "หากกดยืนยันปิดสคริปต์ ระบบช่วยเหลือทั้งหมดจะถูกรีเซ็ต\n(หากต้องการแค่ซ่อนเมนู ให้กดปุ่ม '—' หรือ '🎃 MD Pro' แทน)"
+ModalDesc.ZIndex = 52
+ModalDesc.Parent = ConfirmModal
+
+local ConfirmYesBtn = Instance.new("TextButton")
+ConfirmYesBtn.Size = UDim2.new(0.46, -12, 0, 38)
+ConfirmYesBtn.Position = UDim2.new(0, 14, 1, -50)
+ConfirmYesBtn.BackgroundColor3 = Color3.fromRGB(190, 45, 52)
+ConfirmYesBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ConfirmYesBtn.Font = Enum.Font.GothamBold
+ConfirmYesBtn.TextSize = 13
+ConfirmYesBtn.Text = "✅ ใช่, ปิดจริง"
+ConfirmYesBtn.ZIndex = 52
+ConfirmYesBtn.Parent = ConfirmModal
+
+local YesCorner = Instance.new("UICorner")
+YesCorner.CornerRadius = UDim.new(0, 8)
+YesCorner.Parent = ConfirmYesBtn
+
+local ConfirmNoBtn = Instance.new("TextButton")
+ConfirmNoBtn.Size = UDim2.new(0.46, -12, 0, 38)
+ConfirmNoBtn.Position = UDim2.new(0.54, -2, 1, -50)
+ConfirmNoBtn.BackgroundColor3 = Color3.fromRGB(46, 130, 72)
+ConfirmNoBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ConfirmNoBtn.Font = Enum.Font.GothamBold
+ConfirmNoBtn.TextSize = 13
+ConfirmNoBtn.Text = "❌ ไม่ปิด (กลับไปใช้)"
+ConfirmNoBtn.ZIndex = 52
+ConfirmNoBtn.Parent = ConfirmModal
+
+local NoCorner = Instance.new("UICorner")
+NoCorner.CornerRadius = UDim.new(0, 8)
+NoCorner.Parent = ConfirmNoBtn
+
+-- ฟังก์ชันเปิด/ปิดหน้าต่างถามยืนยันการปิดสคริปต์
+local function ShowCloseConfirmationDialog()
+    -- หากหน้าต่างพับย่ออยู่ ให้กางออกมาก่อนเพื่อแสดงกล่องข้อความชัดเจน
+    if State.IsMinimized then
+        State.IsMinimized = false
+        CollapseBtn.Text = "—"
+        local targetSize = State.IsExpanded and EXPANDED_SIZE or NORMAL_SIZE
+        TweenService:Create(MainFrame, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            Size = targetSize
+        }):Play()
+    end
+    ConfirmOverlay.Visible = true
+end
+
+CloseRequestBtn.MouseButton1Click:Connect(ShowCloseConfirmationDialog)
+
+ConfirmNoBtn.MouseButton1Click:Connect(function()
+    ConfirmOverlay.Visible = false
+end)
+
+ConfirmYesBtn.MouseButton1Click:Connect(function()
+    ConfirmOverlay.Visible = false
+    CleanupAll()
+end)
+
+-- ฟังก์ชันทำงานของปุ่มพับเก็บหน้าต่าง (Minimize / Collapse) และปุ่มขยายขนาด (Expand / Resize)
+local function UpdateWindowGeometry()
+    local baseSize = State.IsExpanded and EXPANDED_SIZE or NORMAL_SIZE
+    if State.IsMinimized then
+        CollapseBtn.Text = "➕"
+        TweenService:Create(MainFrame, TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+            Size = UDim2.new(baseSize.X.Scale, baseSize.X.Offset, 0, COLLAPSED_HEIGHT)
+        }):Play()
+    else
+        CollapseBtn.Text = "—"
+        TweenService:Create(MainFrame, TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+            Size = baseSize
+        }):Play()
+    end
+end
+
+CollapseBtn.MouseButton1Click:Connect(function()
+    State.IsMinimized = not State.IsMinimized
+    UpdateWindowGeometry()
+end)
+
+ResizeBtn.MouseButton1Click:Connect(function()
+    State.IsExpanded = not State.IsExpanded
+    State.IsMinimized = false
+    ResizeBtn.Text = State.IsExpanded and "🗗" or "⛶"
+    UpdateWindowGeometry()
+end)
+
+FloatingBtn.MouseButton1Click:Connect(function()
+    MainFrame.Visible = not MainFrame.Visible
+end)
+
+-- ระบบลากหน้าต่างหลักและปุ่มลอยอย่างลื่นไหล (Draggable Helper)
+local function MakeDraggable(dragHandle: GuiObject, targetFrame: GuiObject)
+    local dragging = false
+    local dragStart = Vector2.zero
+    local startPos = UDim2.new()
+
+    TrackConnection(dragHandle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = targetFrame.Position
+        end
+    end))
+
+    TrackConnection(UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            targetFrame.Position = UDim2.new(
+                startPos.X.Scale,
+                startPos.X.Offset + delta.X,
+                startPos.Y.Scale,
+                startPos.Y.Offset + delta.Y
+            )
+        end
+    end))
+
+    TrackConnection(UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end))
+end
+
+MakeDraggable(TopBar, MainFrame)
+MakeDraggable(FloatingBtn, FloatingBtn)
+
+-- พื้นที่จัดวาง Sidebar และ ContentArea
+local BodyContainer = Instance.new("Frame")
+BodyContainer.Name = "BodyContainer"
+BodyContainer.Size = UDim2.new(1, 0, 1, -COLLAPSED_HEIGHT)
+BodyContainer.Position = UDim2.new(0, 0, 0, COLLAPSED_HEIGHT)
+BodyContainer.BackgroundTransparency = 1
+BodyContainer.Parent = MainFrame
+
+local Sidebar = Instance.new("Frame")
+Sidebar.Size = UDim2.new(0, 165, 1, -14)
+Sidebar.Position = UDim2.new(0, 8, 0, 7)
+Sidebar.BackgroundColor3 = Color3.fromRGB(24, 24, 34)
+Sidebar.BorderSizePixel = 0
+Sidebar.Parent = BodyContainer
+
+local SideCorner = Instance.new("UICorner")
+SideCorner.CornerRadius = UDim.new(0, 8)
+SideCorner.Parent = Sidebar
+
+local SideLayout = Instance.new("UIListLayout")
+SideLayout.Padding = UDim.new(0, 6)
+SideLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+SideLayout.Parent = Sidebar
+
+local SidePad = Instance.new("UIPadding")
+SidePad.PaddingTop = UDim.new(0, 8)
+SidePad.Parent = Sidebar
+
+local ContentArea = Instance.new("Frame")
+ContentArea.Size = UDim2.new(1, -187, 1, -14)
+ContentArea.Position = UDim2.new(0, 179, 0, 7)
+ContentArea.BackgroundColor3 = Color3.fromRGB(22, 22, 31)
+ContentArea.BorderSizePixel = 0
+ContentArea.Parent = BodyContainer
+
+local ContentCorner = Instance.new("UICorner")
+ContentCorner.CornerRadius = UDim.new(0, 8)
+ContentCorner.Parent = ContentArea
+
+local Tabs: { [string]: ScrollingFrame } = {}
+local TabButtons: { [string]: TextButton } = {}
+
+local function CreateTab(tabKey: string, tabTitle: string): ScrollingFrame
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, -14, 0, 38)
+    btn.BackgroundColor3 = Color3.fromRGB(34, 34, 48)
+    btn.TextColor3 = Color3.fromRGB(215, 215, 225)
+    btn.Font = Enum.Font.GothamSemibold
+    btn.TextSize = 12
+    btn.Text = tabTitle
+    btn.AutoButtonColor = false
+    btn.Parent = Sidebar
+
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0, 6)
+    btnCorner.Parent = btn
+
+    local page = Instance.new("ScrollingFrame")
+    page.Size = UDim2.new(1, -14, 1, -14)
+    page.Position = UDim2.new(0, 7, 0, 7)
+    page.BackgroundTransparency = 1
+    page.BorderSizePixel = 0
+    page.ScrollBarThickness = 4
+    page.ScrollBarImageColor3 = Color3.fromRGB(255, 140, 40)
+    page.CanvasSize = UDim2.new(0, 0, 0, 0)
+    page.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    page.Visible = false
+    page.Parent = ContentArea
+
+    local list = Instance.new("UIListLayout")
+    list.Padding = UDim.new(0, 7)
+    list.SortOrder = Enum.SortOrder.LayoutOrder
+    list.Parent = page
+
+    local pad = Instance.new("UIPadding")
+    pad.PaddingBottom = UDim.new(0, 12)
+    pad.PaddingRight = UDim.new(0, 6)
+    pad.Parent = page
+
+    btn.MouseButton1Click:Connect(function()
+        for k, p in pairs(Tabs) do
+            p.Visible = (k == tabKey)
+        end
+        for k, b in pairs(TabButtons) do
+            if k == tabKey then
+                b.BackgroundColor3 = Color3.fromRGB(255, 130, 35)
+                b.TextColor3 = Color3.fromRGB(18, 18, 24)
+            else
+                b.BackgroundColor3 = Color3.fromRGB(34, 34, 48)
+                b.TextColor3 = Color3.fromRGB(215, 215, 225)
+            end
+        end
+    end)
+
+    Tabs[tabKey] = page
+    TabButtons[tabKey] = btn
+    return page
+end
+
+-- Helper สร้างคอมโพเนนต์ภายในแท็บ
+local function CreateSectionHeader(parent: ScrollingFrame, text: string)
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, 0, 0, 24)
+    lbl.BackgroundTransparency = 1
+    lbl.Font = Enum.Font.GothamBold
+    lbl.TextSize = 13
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.TextColor3 = Color3.fromRGB(255, 165, 65)
+    lbl.Text = "▸ " .. text
+    lbl.Parent = parent
+end
+
+local function CreateInfoBox(parent: ScrollingFrame, initialText: string, height: number?): TextLabel
+    local box = Instance.new("TextLabel")
+    box.Size = UDim2.new(1, 0, 0, height or 56)
+    box.BackgroundColor3 = Color3.fromRGB(30, 30, 44)
+    box.TextColor3 = Color3.fromRGB(235, 235, 245)
+    box.Font = Enum.Font.Gotham
+    box.TextSize = 12
+    box.TextXAlignment = Enum.TextXAlignment.Left
+    box.TextYAlignment = Enum.TextYAlignment.Center
+    box.TextWrapped = true
+    box.Text = initialText
+    box.Parent = parent
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 6)
+    corner.Parent = box
+
+    local pad = Instance.new("UIPadding")
+    pad.PaddingLeft = UDim.new(0, 10)
+    pad.PaddingRight = UDim.new(0, 10)
+    pad.Parent = box
+
+    return box
+end
+
+local function CreateButton(parent: Instance, text: string, callback: () -> ()): TextButton
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, 0, 0, 34)
+    btn.BackgroundColor3 = Color3.fromRGB(42, 44, 62)
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Font = Enum.Font.GothamSemibold
+    btn.TextSize = 12
+    btn.Text = text
+    btn.Parent = parent
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 6)
+    corner.Parent = btn
+
+    btn.MouseButton1Click:Connect(function()
+        task.spawn(function()
+            pcall(callback)
+        end)
+    end)
+    return btn
+end
+
+local function CreateToggle(parent: ScrollingFrame, text: string, defaultState: boolean, callback: (boolean) -> ())
+    local state = defaultState
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, 0, 0, 34)
+    btn.BackgroundColor3 = state and Color3.fromRGB(42, 92, 58) or Color3.fromRGB(34, 34, 48)
+    btn.TextColor3 = Color3.fromRGB(245, 245, 245)
+    btn.Font = Enum.Font.GothamSemibold
+    btn.TextSize = 12
+    btn.TextXAlignment = Enum.TextXAlignment.Left
+    btn.Text = (state and "  [เปิด] " or "  [ปิด] ") .. text
+    btn.Parent = parent
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 6)
+    corner.Parent = btn
+
+    btn.MouseButton1Click:Connect(function()
+        state = not state
+        btn.BackgroundColor3 = state and Color3.fromRGB(42, 92, 58) or Color3.fromRGB(34, 34, 48)
+        btn.Text = (state and "  [เปิด] " or "  [ปิด] ") .. text
+        task.spawn(function()
+            pcall(callback, state)
+        end)
+    end)
+end
+
+local function CreateSlider(parent: ScrollingFrame, title: string, minVal: number, maxVal: number, defaultVal: number, callback: (number) -> ())
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1, 0, 0, 48)
+    container.BackgroundColor3 = Color3.fromRGB(30, 30, 44)
+    container.Parent = parent
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 6)
+    corner.Parent = container
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, -20, 0, 22)
+    lbl.Position = UDim2.new(0, 10, 0, 2)
+    lbl.BackgroundTransparency = 1
+    lbl.Font = Enum.Font.GothamSemibold
+    lbl.TextSize = 12
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.TextColor3 = Color3.fromRGB(235, 235, 245)
+    lbl.Text = string.format("%s: %d", title, defaultVal)
+    lbl.Parent = container
+
+    local minusBtn = Instance.new("TextButton")
+    minusBtn.Size = UDim2.new(0.46, -12, 0, 20)
+    minusBtn.Position = UDim2.new(0, 10, 0, 24)
+    minusBtn.BackgroundColor3 = Color3.fromRGB(48, 48, 66)
+    minusBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    minusBtn.Font = Enum.Font.GothamBold
+    minusBtn.TextSize = 12
+    minusBtn.Text = "- ลดค่า"
+    minusBtn.Parent = container
+
+    local plusBtn = Instance.new("TextButton")
+    plusBtn.Size = UDim2.new(0.46, -12, 0, 20)
+    plusBtn.Position = UDim2.new(0.54, 2, 0, 24)
+    plusBtn.BackgroundColor3 = Color3.fromRGB(255, 130, 35)
+    plusBtn.TextColor3 = Color3.fromRGB(18, 18, 24)
+    plusBtn.Font = Enum.Font.GothamBold
+    plusBtn.TextSize = 12
+    plusBtn.Text = "+ เพิ่มค่า"
+    plusBtn.Parent = container
+
+    local cur = defaultVal
+    local step = math.max(1, math.floor((maxVal - minVal) / 16))
+
+    minusBtn.MouseButton1Click:Connect(function()
+        cur = math.clamp(cur - step, minVal, maxVal)
+        lbl.Text = string.format("%s: %d", title, cur)
+        pcall(callback, cur)
+    end)
+
+    plusBtn.MouseButton1Click:Connect(function()
+        cur = math.clamp(cur + step, minVal, maxVal)
+        lbl.Text = string.format("%s: %d", title, cur)
+        pcall(callback, cur)
+    end)
+end
+
+-- สร้างทั้ง 5 แท็บหลัก
+local Tab1 = CreateTab("Tab1", "📊 1. เรดาร์/ข้อมูลสด")
+local Tab2 = CreateTab("Tab2", "🧭 2. วาร์ป/ยุทธวิธี")
+local Tab3 = CreateTab("Tab3", "⚔️ 3. ช่วยดวล/แก้ทาง")
+local Tab4 = CreateTab("Tab4", "🏃 4. ตัวละคร/สภาพแมพ")
+local Tab5 = CreateTab("Tab5", "🛠️ 5. สแกน/เซิร์ฟเวอร์")
+
+Tabs["Tab1"].Visible = true
+TabButtons["Tab1"].BackgroundColor3 = Color3.fromRGB(255, 130, 35)
+TabButtons["Tab1"].TextColor3 = Color3.fromRGB(18, 18, 24)
+
+-- ============================================================================
+-- [TAB 1] LIVE DASHBOARD & REAL-TIME ENEMY THREAT RADAR
+-- ============================================================================
+CreateSectionHeader(Tab1, "ภาพรวมแมพ [🎃] ดวลฆาตกรรม (Live Telemetry Dashboard)")
+local LiveGameBox = CreateInfoBox(Tab1, "กำลังโหลดข้อมูลแมพ...", 52)
+local LiveStatsBox = CreateInfoBox(Tab1, "กำลังคำนวณพิกัดและ FPS...", 52)
+
+CreateSectionHeader(Tab1, "เรดาร์ตรวจจับอาวุธศัตรูแบบเรียลไทม์ (Live Enemy Weapon Radar)")
+local LiveThreatRadarBox = CreateInfoBox(Tab1, "กำลังสแกนหาผู้เล่นที่ถือมีดและปืนลูกโม่...", 92)
+
+CreateSectionHeader(Tab1, "ทางลัดจัดการหน้าต่างด่วน (Quick Window Controls)")
+CreateButton(Tab1, "⛶ สลับโหมดขยายหน้าต่างใหญ่ / ขนาดปกติ (Toggle Expand Window)", function()
+    State.IsExpanded = not State.IsExpanded
+    State.IsMinimized = false
+    ResizeBtn.Text = State.IsExpanded and "🗗" or "⛶"
+    UpdateWindowGeometry()
+end)
+CreateButton(Tab1, "— พับเก็บหน้าต่างเหลือแถบด้านบน (Collapse Window)", function()
+    State.IsMinimized = true
+    UpdateWindowGeometry()
+end)
+
+-- ============================================================================
+-- [TAB 2] FULL-MAP NAVIGATION, CUSTOM WAYPOINTS & TACTICAL TELEPORTS
+-- ============================================================================
+CreateSectionHeader(Tab2, "ตั้งค่าระบบการเคลื่อนที่ (Navigation Settings)")
+CreateToggle(Tab2, "วาร์ปทันที (Instant Teleport / ปิดเพื่อใช้ Smooth Tween)", false, function(v)
+    State.Settings.UseInstantTeleport = v
+end)
+CreateSlider(Tab2, "ความเร็ว Smooth Tween (Studs/s)", 30, 260, 100, function(v)
+    State.Settings.TweenSpeed = v
+end)
+CreateButton(Tab2, "🛑 หยุดการเคลื่อนที่ Tween ทันที (Emergency Stop Movement)", function()
+    CancelActiveTween()
+end)
+
+CreateSectionHeader(Tab2, "วาร์ปยุทธวิธีและบินวนรอบศัตรู (Tactical Combat Reposition)")
+CreateButton(Tab2, "⚡ วาร์ปไปซ้อนหลังศัตรูที่ใกล้ที่สุด (Flank Nearest Enemy)", function()
+    local _, enemyHrp, _ = FindTargetEnemy(nil)
+    if enemyHrp then
+        NavigateToCFrame(enemyHrp.CFrame * CFrame.new(0, 0, 5.5))
+    end
+end)
+CreateButton(Tab2, "🔪 วาร์ปไปซ้อนหลังคนที่กำลังถือมีด (Flank Knife Holder)", function()
+    local _, enemyHrp, _ = FindTargetEnemy("Knife")
+    if enemyHrp then
+        NavigateToCFrame(enemyHrp.CFrame * CFrame.new(0, 0, 6.5))
+    end
+end)
+CreateButton(Tab2, "🔫 วาร์ปไปซ้อนหลังคนที่กำลังถือปืน (Flank Revolver Holder)", function()
+    local _, enemyHrp, _ = FindTargetEnemy("Revolver")
+    if enemyHrp then
+        NavigateToCFrame(enemyHrp.CFrame * CFrame.new(0, 0, 5.0))
+    end
+end)
+CreateToggle(Tab2, "บินวนรอบศัตรูที่ใกล้ที่สุดอัตโนมัติ (Auto Orbit Strafe หลบกระสุน)", false, function(v)
+    State.Settings.OrbitNearestEnemy = v
+end)
+CreateSlider(Tab2, "รัศมีบินวนรอบศัตรู (Orbit Radius)", 4, 22, 9, function(v)
+    State.Settings.OrbitRadius = v
+end)
+CreateSlider(Tab2, "ความเร็วบินวนรอบศัตรู (Orbit Speed)", 1, 12, 4, function(v)
+    State.Settings.OrbitSpeed = v
+end)
+
+CreateSectionHeader(Tab2, "บันทึกพิกัดส่วนตัว & หนีขึ้นที่สูงฉุกเฉิน (Custom Waypoint)")
+CreateButton(Tab2, "🛡️ วาร์ปหนีขึ้นที่สูงฉุกเฉิน (+32 Studs เหนือหัว)", function()
+    local _, myHrp, _ = GetSafeCharacter()
+    if myHrp then
+        NavigateToCFrame(myHrp.CFrame + Vector3.new(0, 32, 0))
+    end
+end)
+CreateButton(Tab2, "💾 บันทึกพิกัดที่ยืนอยู่ปัจจุบัน (Save Custom Position)", function()
+    local _, myHrp, _ = GetSafeCharacter()
+    if myHrp then
+        State.SavedCustomWaypoint = myHrp.CFrame
+    end
+end)
+CreateButton(Tab2, "🚀 วาร์ปกลับไปยังพิกัดที่บันทึกไว้ (Teleport to Saved Position)", function()
+    if State.SavedCustomWaypoint then
+        NavigateToCFrame(State.SavedCustomWaypoint)
+    end
+end)
+
+CreateSectionHeader(Tab2, "จุดวาร์ปทั่วแมพ Lobby & สนามดวลทั้งหมด (All Map Waypoints)")
+local WaypointContainer = Instance.new("Frame")
+WaypointContainer.Size = UDim2.new(1, 0, 0, 0)
+WaypointContainer.AutomaticSize = Enum.AutomaticSize.Y
+WaypointContainer.BackgroundTransparency = 1
+WaypointContainer.Parent = Tab2
+
+local WaypointLayout = Instance.new("UIListLayout")
+WaypointLayout.Padding = UDim.new(0, 5)
+WaypointLayout.Parent = WaypointContainer
+
+local function RebuildWaypointButtons()
+    for _, child in ipairs(WaypointContainer:GetChildren()) do
+        if child:IsA("TextButton") then
+            child:Destroy()
+        end
+    end
+    ScanMurderDuelsMap()
+    for name, cf in pairs(State.CachedMapInfo.DetectedWaypoints) do
+        CreateButton(WaypointContainer, "📍 ไปยัง: " .. name, function()
+            NavigateToCFrame(cf)
+        end)
+    end
+end
+
+CreateButton(Tab2, "🔄 รีเฟรชรายชื่อจุดวาร์ปตามด่านดวลที่โหลดอยู่", function()
+    RebuildWaypointButtons()
+end)
+
+-- ============================================================================
+-- [TAB 3] COMBAT ASSIST, ESP, AIMLOCK & COUNTER-ABILITIES
+-- ============================================================================
+CreateSectionHeader(Tab3, "Tactical ESP, X-Ray & เส้นชี้เป้า (ไม่โดนร่างแยก Decoy หลอก)")
+CreateToggle(Tab3, "เปิดใช้งาน Tactical ESP & X-Ray (แยกสีปืน/มีด/ทีม)", false, function(v)
+    State.Settings.ESPEnabled = v
+    UpdatePlayerESP()
+end)
+CreateToggle(Tab3, "แสดงชื่ออาวุธที่ถืออยู่ในมือเหนือหัว (Weapon Tag Indicator)", true, function(v)
+    State.Settings.ShowWeaponInHand = v
+    UpdatePlayerESP()
+end)
+CreateToggle(Tab3, "แสดงเส้นชี้เป้าจากตัวเราไปยังศัตรู (3D Tracer Beams)", false, function(v)
+    State.Settings.TracerBeams = v
+    UpdatePlayerESP()
+end)
+CreateToggle(Tab3, "แจ้งเตือนแบนเนอร์บนจอเมื่อศัตรูพุ่งเข้ามาใกล้ (Threat Proximity Alert)", true, function(v)
+    State.Settings.ProximityThreatAlert = v
+end)
+CreateSlider(Tab3, "ระยะแจ้งเตือนศัตรูเข้าใกล้ (Studs)", 10, 40, 18, function(v)
+    State.Settings.ThreatAlertDistance = v
+end)
+
+CreateSectionHeader(Tab3, "ระบบช่วยเล็งและขยายเป้าโจมตี (Soft Camera Aimlock & Hitbox)")
+CreateToggle(Tab3, "หันกล้องล็อกเป้าศัตรูอัตโนมัติแบบนุ่มนวล (Soft Camera Aimlock)", false, function(v)
+    State.Settings.SoftCameraAimlock = v
+end)
+CreateButton(Tab3, "🎯 สลับจุดเล็งกล้อง Aimlock (หัว Head / ลำตัว HumanoidRootPart)", function()
+    if State.Settings.AimlockTargetPart == "Head" then
+        State.Settings.AimlockTargetPart = "HumanoidRootPart"
+    else
+        State.Settings.AimlockTargetPart = "Head"
+    end
+end)
+CreateToggle(Tab3, "ขยายขนาด Hitbox ศัตรู (ยิงปืนลูกโม่และปามีดโดนง่ายขึ้น)", false, function(v)
+    State.Settings.HitboxExpander = v
+    RunTacticalMaintenance()
+end)
+CreateSlider(Tab3, "ขนาด Hitbox ศัตรู (Studs)", 2, 15, 6, function(v)
+    State.Settings.HitboxSize = v
+end)
+
+CreateSectionHeader(Tab3, "ระบบแก้ทางสกิลและจุดอันตรายในสนามดวล (Counter-Ability Suite)")
+CreateToggle(Tab3, "สร้างพื้นนีออนเซฟตี้กันตกบ่อน้ำลดเลือด (Water Hazard Safety Floor)", false, function(v)
+    State.Settings.WaterHazardFloor = v
+    UpdateWaterHazardPlatform()
+end)
+CreateToggle(Tab3, "ลบควันบังตาจากสกิลมีดควันอัตโนมัติ (Anti-Smoke Knife Cleaner)", false, function(v)
+    State.Settings.AutoClearSmoke = v
+end)
+CreateToggle(Tab3, "ไฮไลท์กับดักไฟ Molotov / มีดระเบิด / ประตูมิติ Portal", false, function(v)
+    State.Settings.HighlightArenaTraps = v
+end)
+CreateToggle(Tab3, "กระโดดหลบอัตโนมัติเมื่อศัตรูพุ่งเข้าระยะมีด (Auto-Evade Jump)", false, function(v)
+    State.Settings.AutoEvadeJump = v
+end)
+CreateToggle(Tab3, "พุ่งถอยหลังรักษาระยะห่างอัตโนมัติเมื่อศัตรูประชิด (Auto Backstep)", false, function(v)
+    State.Settings.AutoEvadeBackstep = v
+end)
+CreateSlider(Tab3, "ระยะทำงานของระบบหลบอัตโนมัติ (Studs)", 8, 26, 14, function(v)
+    State.Settings.EvadeTriggerDist = v
+end)
+
+-- ============================================================================
+-- [TAB 4] CHARACTER, MOVEMENT, CAMERA & WORLD ENVIRONMENT
+-- ============================================================================
+CreateSectionHeader(Tab4, "การเคลื่อนที่ของตัวละคร (คงค่าอัตโนมัติเมื่อเริ่มรอบดวลใหม่)")
+CreateToggle(Tab4, "เปิดใช้งานปรับความเร็วเดิน (Custom WalkSpeed)", false, function(v)
+    State.Settings.CustomWalkSpeed = v
+    ApplyCharacterAndEnvironmentSettings()
+end)
+CreateSlider(Tab4, "ระดับความเร็ว WalkSpeed", 16, 85, 24, function(v)
+    State.Settings.WalkSpeedValue = v
+    ApplyCharacterAndEnvironmentSettings()
+end)
+CreateToggle(Tab4, "เปิดใช้งานปรับพลังกระโดด (Custom JumpPower)", false, function(v)
+    State.Settings.CustomJumpPower = v
+    ApplyCharacterAndEnvironmentSettings()
+end)
+CreateSlider(Tab4, "ระดับพลังกระโดด JumpPower", 50, 140, 58, function(v)
+    State.Settings.JumpPowerValue = v
+    ApplyCharacterAndEnvironmentSettings()
+end)
+CreateToggle(Tab4, "กระโดดกลางอากาศไม่จำกัด (Infinite Jump)", false, function(v)
+    State.Settings.InfiniteJump = v
+end)
+CreateToggle(Tab4, "เดินทะลุกำแพงและสิ่งกีดขวาง (Noclip Mode)", false, function(v)
+    State.Settings.Noclip = v
+end)
+CreateToggle(Tab4, "ปรับแรงโน้มถ่วงลอยตัวช้าลง (Low Gravity Mode)", false, function(v)
+    State.Settings.CustomGravity = v
+    ApplyCharacterAndEnvironmentSettings()
+end)
+CreateSlider(Tab4, "ค่าแรงโน้มถ่วง (Gravity - ปกติ 196)", 40, 196, 120, function(v)
+    State.Settings.GravityValue = v
+    ApplyCharacterAndEnvironmentSettings()
+end)
+CreateToggle(Tab4, "หมุนตัวความเร็วสูงหลบกระสุนปืน (Anti-Hit Spinbot)", false, function(v)
+    State.Settings.Spinbot = v
+end)
+CreateSlider(Tab4, "ความเร็วการหมุน Spinbot", 10, 60, 25, function(v)
+    State.Settings.SpinbotSpeed = v
+end)
+
+CreateSectionHeader(Tab4, "มุมกล้องและแสงสว่างในแมพฮาโลวีน (Camera & World Lighting)")
+CreateToggle(Tab4, "ปรับมุมมองกล้องกว้างพิเศษ (Custom FOV)", false, function(v)
+    State.Settings.CustomFOV = v
+    ApplyCharacterAndEnvironmentSettings()
+end)
+CreateSlider(Tab4, "ค่ามุมมองกล้อง (FOV)", 70, 120, 95, function(v)
+    State.Settings.FOVValue = v
+    ApplyCharacterAndEnvironmentSettings()
+end)
+CreateToggle(Tab4, "ปลดล็อกระยะซูมกล้องสูงสุด (Unlock Max Camera Zoom)", false, function(v)
+    State.Settings.UnlockMaxZoom = v
+    ApplyCharacterAndEnvironmentSettings()
+end)
+CreateToggle(Tab4, "แมพสว่างชัดเจน มองเห็นมุมมืดด่านฮาโลวีน (Fullbright)", false, function(v)
+    State.Settings.Fullbright = v
+    ApplyCharacterAndEnvironmentSettings()
+end)
+CreateToggle(Tab4, "ลบหมอกในสนามดวล (No Fog)", false, function(v)
+    State.Settings.NoFog = v
+    ApplyCharacterAndEnvironmentSettings()
+end)
+CreateToggle(Tab4, "ล็อกเวลาในเกม (Custom Time of Day)", false, function(v)
+    State.Settings.CustomClockTime = v
+    ApplyCharacterAndEnvironmentSettings()
+end)
+CreateSlider(Tab4, "เวลาในเกม (0 = เที่ยงคืน / 14 = บ่ายสอง)", 0, 24, 14, function(v)
+    State.Settings.ClockTimeValue = v
+    ApplyCharacterAndEnvironmentSettings()
+end)
+
+-- ============================================================================
+-- [TAB 5] MAP SCANNER, PLAYER TELEPORTER, FPS BOOST & SERVER TOOLS
+-- ============================================================================
+CreateSectionHeader(Tab5, "วาร์ปไปหาผู้เล่นในเซิร์ฟเวอร์รายบุคคล (Player Teleporter)")
+local PlayerTeleportContainer = Instance.new("Frame")
+PlayerTeleportContainer.Size = UDim2.new(1, 0, 0, 0)
+PlayerTeleportContainer.AutomaticSize = Enum.AutomaticSize.Y
+PlayerTeleportContainer.BackgroundTransparency = 1
+PlayerTeleportContainer.Parent = Tab5
+
+local PlayerTeleportLayout = Instance.new("UIListLayout")
+PlayerTeleportLayout.Padding = UDim.new(0, 5)
+PlayerTeleportLayout.Parent = PlayerTeleportContainer
+
+local function RefreshPlayerTeleportList()
+    for _, child in ipairs(PlayerTeleportContainer:GetChildren()) do
+        if child:IsA("TextButton") then
+            child:Destroy()
+        end
+    end
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer then
+            CreateButton(PlayerTeleportContainer, "👤 วาร์ปไปหา: " .. plr.DisplayName .. " (@" .. plr.Name .. ")", function()
+                if plr.Character then
+                    local tHrp = plr.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
+                    if tHrp then
+                        NavigateToCFrame(tHrp.CFrame * CFrame.new(0, 0, 4.5))
+                    end
+                end
+            end)
+        end
+    end
+end
+
+CreateButton(Tab5, "🔄 อัปเดตรายชื่อผู้เล่นในเซิร์ฟเวอร์ปัจจุบัน", function()
+    RefreshPlayerTeleportList()
+end)
+
+CreateSectionHeader(Tab5, "สแกนโครงสร้างแมพ & ลดแลคเพิ่ม FPS (Scanner & Performance)")
+local ScannerOutputBox = CreateInfoBox(Tab5, "กดปุ่มด้านล่างเพื่อสแกนโครงสร้างแมพหรือคัดลอกพิกัดปัจจุบัน", 58)
+
+CreateButton(Tab5, "🔍 สแกนโครงสร้างแมพสด (Scan Workspace Folders & Arena)", function()
+    RebuildWaypointButtons()
+    local summary = table.concat(State.CachedMapInfo.DynamicFolders, ", ")
+    if summary == "" then summary = "ไม่พบโฟลเดอร์ย่อยเพิ่มเติม" end
+    ScannerOutputBox.Text = "สนามดวล: " .. State.CachedMapInfo.CurrentArenaName .. "\nโฟลเดอร์ในแมพ: " .. string.sub(summary, 1, 150)
+end)
+
+CreateButton(Tab5, "📋 คัดลอกพิกัด CFrame ปัจจุบันลงคลิปบอร์ด (Copy Coordinate)", function()
+    local _, hrp, _ = GetSafeCharacter()
+    if hrp then
+        local p = hrp.Position
+        local str = string.format("CFrame.new(%.1f, %.1f, %.1f)", p.X, p.Y, p.Z)
+        ScannerOutputBox.Text = "คัดลอกพิกัดสำเร็จ: " .. str
+        if setclipboard then
+            pcall(setclipboard, str)
+        end
+    end
+end)
+
+CreateButton(Tab5, "🚀 เปิดโหมดลดกราฟิกเพิ่ม FPS ลื่นพิเศษ (FPS Booster / Low GFX)", function()
+    pcall(function()
+        for _, obj in ipairs(Workspace:GetDescendants()) do
+            if obj:IsA("BasePart") then
+                obj.Material = Enum.Material.SmoothPlastic
+                obj.Reflectance = 0
+            elseif obj:IsA("Decal") or obj:IsA("Texture") then
+                obj.Transparency = 0.85
+            end
+        end
+        Lighting.GlobalShadows = false
+        ScannerOutputBox.Text = "เปิดใช้งาน FPS Booster สำเร็จ! ปรับพื้นผิวเป็น SmoothPlastic ทั้งแมพแล้ว"
+    end)
+end)
+
+CreateSectionHeader(Tab5, "จัดการเซิร์ฟเวอร์และปิดสคริปต์ (Server & Safe Unload)")
+CreateToggle(Tab5, "ป้องกันหลุดออกจากเซิร์ฟเวอร์เมื่อเปิดทิ้งไว้ (Anti-AFK)", true, function(v)
+    State.Settings.AntiAFK = v
+end)
+CreateButton(Tab5, "🔄 เข้าเซิร์ฟเวอร์เดิมใหม่อีกครั้ง (Rejoin Current Server)", function()
+    TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
+end)
+CreateButton(Tab5, "🌐 ย้ายไปเซิร์ฟเวอร์อื่นที่คนไม่เต็ม (Server Hop)", function()
+    local ok, response = pcall(function()
+        return game:HttpGet(
+            string.format("https://games.roblox.com/v1/games/%d/servers/Public?sortOrder=Asc&limit=100", game.PlaceId)
+        )
+    end)
+    if ok and response then
+        local decoded = HttpService:JSONDecode(response)
+        if decoded and decoded.data then
+            for _, srv in ipairs(decoded.data) do
+                if type(srv) == "table" and srv.playing < srv.maxPlayers and srv.id ~= game.JobId then
+                    TeleportService:TeleportToPlaceInstance(game.PlaceId, srv.id, LocalPlayer)
+                    return
+                end
+            end
+        end
+    end
+    TeleportService:Teleport(game.PlaceId, LocalPlayer)
+end)
+
+CreateButton(Tab5, "⚠️ ปิดสคริปต์ (จะแสดงหน้าต่างถามยืนยัน 'ต้องการปิดจริงหรอ?')", function()
+    ShowCloseConfirmationDialog()
+end)
+
+-- ============================================================================
+-- [SECTION 6] INITIALIZATION & NON-BLOCKING BACKGROUND LOOPS
+-- ============================================================================
+RebuildWaypointButtons()
+RefreshPlayerTeleportList()
+
+-- ลูปที่ 1: อัปเดต ESP, พื้นกันตกน้ำ, ระบบแก้ทางสกิล และแบนเนอร์เตือนภัย (ทุก 0.15 วินาที)
+task.spawn(function()
+    while State.Running do
+        pcall(function()
+            UpdatePlayerESP()
+            UpdateWaterHazardPlatform()
+            RunTacticalMaintenance()
+            ApplyCharacterAndEnvironmentSettings()
+
+            -- อัปเดตแบนเนอร์เตือนภัยเมื่อศัตรูเข้าใกล้
+            if State.Settings.ProximityThreatAlert then
+                local nearestEnemy, _, dist = FindTargetEnemy(nil)
+                if nearestEnemy and nearestEnemy.Character and dist <= State.Settings.ThreatAlertDistance then
+                    local _, weaponName, _ = GetEquippedWeaponInfo(nearestEnemy.Character)
+                    ThreatBanner.Visible = true
+                    ThreatBanner.Text = string.format(
+                        "⚠️ ระวัง! %s (%s) อยู่ห่างเพียง %d เมตร!",
+                        nearestEnemy.DisplayName,
+                        weaponName,
+                        math.floor(dist)
+                    )
+                else
+                    ThreatBanner.Visible = false
+                end
+            else
+                ThreatBanner.Visible = false
+            end
+        end)
+        task.wait(0.15)
+    end
+end)
+
+-- ลูปที่ 2: อัปเดต Dashboard และเรดาร์อาวุธศัตรูในแท็บที่ 1 (ทุก 0.7 วินาที ไม่กิน FPS)
+task.spawn(function()
+    while State.Running do
+        pcall(function()
+            local _, hrp, hum = GetSafeCharacter()
+            local posText = hrp and string.format("X: %.1f | Y: %.1f | Z: %.1f", hrp.Position.X, hrp.Position.Y, hrp.Position.Z) or "รอตัวละครเกิด..."
+            local hpText = hum and string.format("%.0f / %.0f", hum.Health, hum.MaxHealth) or "0 / 0"
+            local fps = math.floor(1 / math.max(RunService.RenderStepped:Wait(), 0.001))
+
+            LiveGameBox.Text = string.format(
+                "เกม: %s | ผู้พัฒนา: %s\nPlaceId: %d | ผู้เล่นในเซิร์ฟเวอร์: %d / %d คน | ด่าน: %s",
+                GameDatabase.GameTitle,
+                GameDatabase.Developer,
+                game.PlaceId,
+                #Players:GetPlayers(),
+                Players.MaxPlayers,
+                State.CachedMapInfo.CurrentArenaName
+            )
+
+            LiveStatsBox.Text = string.format(
+                "พิกัด: %s | พลังชีวิต (HP): %s | FPS: %d\nสถานะ Orbit: %s | พื้นกันตกน้ำ: %s | Aimlock: %s",
+                posText,
+                hpText,
+                fps,
+                State.Settings.OrbitNearestEnemy and "เปิด" or "ปิด",
+                State.Settings.WaterHazardFloor and "เปิด" or "ปิด",
+                State.Settings.SoftCameraAimlock and "เปิด" or "ปิด"
+            )
+
+            -- สร้างสรุปเรดาร์ศัตรูสดสูงสุด 4 คนที่อยู่ใกล้ที่สุด
+            local radarLines: { string } = {}
+            if hrp then
+                for _, plr in ipairs(Players:GetPlayers()) do
+                    if plr ~= LocalPlayer and plr.Character then
+                        local eHrp = plr.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
+                        local eHum = plr.Character:FindFirstChildOfClass("Humanoid")
+                        if eHrp and eHum and eHum.Health > 0 then
+                            local _, wLabel, _ = GetEquippedWeaponInfo(plr.Character)
+                            local d = math.floor((hrp.Position - eHrp.Position).Magnitude)
+                            table.insert(radarLines, string.format("• %s [%d HP | %dm] ถือ: %s", plr.DisplayName, math.floor(eHum.Health), d, wLabel))
+                        end
+                    end
+                    if #radarLines >= 4 then break end
+                end
+            end
+
+            if #radarLines == 0 then
+                LiveThreatRadarBox.Text = "เรดาร์: ยังไม่พบศัตรูในระยะสนามดวล หรือกำลังพักรอรอบใหม่ใน Lobby"
+            else
+                LiveThreatRadarBox.Text = table.concat(radarLines, "\n")
+            end
+        end)
+        task.wait(0.7)
+    end
+end)
